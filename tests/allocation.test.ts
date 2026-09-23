@@ -8,9 +8,15 @@ describe('finalizeAllocations', () => {
     divi.items[2].claimantIds = [currentUser.id, alex.id];
     const allocations = finalizeAllocations(divi);
 
-    expect(allocations.reduce((sum, allocation) => sum + allocation.total.minorUnits, 0)).toBe(8692);
+    expect(allocations.reduce((sum, allocation) => sum + allocation.total.minorUnits, 0)).toBe(
+      8692,
+    );
     expect(allocations.every((allocation) => allocation.total.minorUnits > 0)).toBe(true);
-    expect(allocations.map((allocation) => allocation.participantId)).toEqual(['alex', 'charlie', 'sam']);
+    expect(allocations.map((allocation) => allocation.participantId)).toEqual([
+      'alex',
+      'charlie',
+      'sam',
+    ]);
   });
 
   it('blocks finalization while an item is unclaimed', () => {
