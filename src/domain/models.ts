@@ -42,11 +42,21 @@ export type Divi = {
   allocations: Allocation[];
 };
 
-export const money = (minorUnits: number, currencyCode = 'USD'): Money => ({ minorUnits, currencyCode });
+export const money = (minorUnits: number, currencyCode = 'USD'): Money => ({
+  minorUnits,
+  currencyCode,
+});
 export const formatMoney = ({ minorUnits, currencyCode }: Money) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(minorUnits / 100);
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: currencyCode }).format(
+    minorUnits / 100,
+  );
 
-export const currentUser: Participant = { id: 'charlie', name: 'Charlie', venmoUsername: 'charlie', isCurrentUser: true };
+export const currentUser: Participant = {
+  id: 'charlie',
+  name: 'Charlie',
+  venmoUsername: 'charlie',
+  isCurrentUser: true,
+};
 export const alex: Participant = { id: 'alex', name: 'Alex', venmoUsername: 'alex' };
 export const sam: Participant = { id: 'sam', name: 'Sam' };
 
@@ -59,7 +69,12 @@ export const sampleDinner = (state: DiviState = 'claiming'): Divi => ({
   payerId: currentUser.id,
   participants: [currentUser, alex, sam],
   items: [
-    { id: 'patatas', name: 'Patatas bravas', amount: money(1400), claimantIds: [currentUser.id, alex.id] },
+    {
+      id: 'patatas',
+      name: 'Patatas bravas',
+      amount: money(1400),
+      claimantIds: [currentUser.id, alex.id],
+    },
     { id: 'paella', name: 'Paella', amount: money(4800), claimantIds: [alex.id, sam.id] },
     { id: 'water', name: 'Sparkling water', amount: money(700), claimantIds: [] },
   ],
@@ -71,8 +86,19 @@ export const sampleDinner = (state: DiviState = 'claiming'): Divi => ({
   allocations: [],
 });
 
-export const itemSubtotal = (divi: Divi) => divi.items.reduce((sum, item) => sum + item.amount.minorUnits, 0);
-export const calculatedTotal = (divi: Divi) => itemSubtotal(divi) + divi.tax.minorUnits + divi.tip.minorUnits + divi.fees.minorUnits - divi.discounts.minorUnits;
-export const unclaimedCount = (divi: Divi) => divi.items.filter((item) => item.claimantIds.length === 0).length;
+export const itemSubtotal = (divi: Divi) =>
+  divi.items.reduce((sum, item) => sum + item.amount.minorUnits, 0);
+export const calculatedTotal = (divi: Divi) =>
+  itemSubtotal(divi) +
+  divi.tax.minorUnits +
+  divi.tip.minorUnits +
+  divi.fees.minorUnits -
+  divi.discounts.minorUnits;
+export const unclaimedCount = (divi: Divi) =>
+  divi.items.filter((item) => item.claimantIds.length === 0).length;
 export const paymentStatus = (allocation: Allocation): PaymentStatus =>
-  allocation.paid.minorUnits <= 0 ? 'outstanding' : allocation.paid.minorUnits < allocation.total.minorUnits ? 'partiallyPaid' : 'paid';
+  allocation.paid.minorUnits <= 0
+    ? 'outstanding'
+    : allocation.paid.minorUnits < allocation.total.minorUnits
+      ? 'partiallyPaid'
+      : 'paid';

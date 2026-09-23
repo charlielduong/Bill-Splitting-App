@@ -2,7 +2,11 @@ import { Money, Participant } from '../domain/models';
 
 export type VenmoHandoff = { url?: string; recipient?: string; amount: string; note: string };
 
-export const createVenmoRequest = (recipient: Participant, amount: Money, note: string): VenmoHandoff => {
+export const createVenmoRequest = (
+  recipient: Participant,
+  amount: Money,
+  note: string,
+): VenmoHandoff => {
   const username = recipient.venmoUsername?.trim();
   const exactAmount = (amount.minorUnits / 100).toFixed(2);
   const params = new URLSearchParams({ txn: 'charge', amount: exactAmount, note });
