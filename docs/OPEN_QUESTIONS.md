@@ -19,6 +19,8 @@ These decisions are intentionally unresolved. Defaults may be used for local dev
 
 ## Invitations and App Clip
 
+- Should the App Clip remain part of the first production MVP now that the full app is React Native, or move to a later native companion milestone?
+- If retained, which native target/config-plugin strategy will own the App Clip without coupling the TypeScript domain to generated iOS code?
 - What invitation expiry should be used by default?
 - May a creator rotate a token without invalidating already joined participants?
 - Which production domain will host universal-link and App Clip association files?

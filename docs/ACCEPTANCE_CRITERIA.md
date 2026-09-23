@@ -51,7 +51,8 @@ The MVP is complete only when every applicable criterion below is demonstrably s
 ## Build and Documentation
 
 - [ ] Documented setup initializes the database and development configuration without undocumented source changes.
-- [ ] The full app and App Clip build for the supported iOS/Xcode environment.
+- [ ] The full app type-checks, passes automated tests, and produces an Expo bundle for the documented local environment.
+- [ ] Before App Clip work begins, its native target, association domain, and shared-contract strategy are explicitly approved and documented.
 - [ ] Automated unit and integration tests pass.
 - [ ] README, environment template, migrations, preview/seed data, and verified commands are current.
 

@@ -61,9 +61,9 @@ Out of scope for MVP:
 
 ## 2. Platforms and compatibility
 - Platform: iPhone only for MVP.
-- Minimum iOS version: iOS 18.
-- UI framework: SwiftUI.
-- UIKit may be used where SwiftUI functionality is insufficient or materially worse.
+- Initial target: modern iPhones supported by Expo SDK 57 and React Native 0.86.
+- UI framework: React Native with Expo and TypeScript.
+- Native iOS modules may be introduced behind application-owned adapters only when an Expo or JavaScript capability is insufficient.
 - Orientation: Portrait only.
 Accessibility:
 - The application should support:
@@ -222,7 +222,7 @@ The testable checklist is defined in [ACCEPTANCE_CRITERIA.md](ACCEPTANCE_CRITERI
 
 ## 9. Architecture and Delivery Summary
 
-The selected foundation is Swift 6 and SwiftUI on iOS 18 with a Supabase/PostgreSQL backend, Supabase Auth/Realtime/Storage, and replaceable application-owned service boundaries.
+The selected foundation is React Native 0.86, React 19, Expo SDK 57, and TypeScript with a planned Supabase/PostgreSQL backend, Supabase Auth/Realtime/Storage, and replaceable application-owned service boundaries. The first local-review milestone is intentionally backend-free and uses deterministic in-memory adapters.
 
 The MVP prioritizes a strong reproducible local build. CI, automated App Store submission, direct money movement, and irreversible production deployment are outside current scope.
 

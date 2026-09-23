@@ -4,7 +4,8 @@ This document is the source of truth for data, services, financial rules, securi
 
 ## 1. Technology Baseline
 
-- iPhone app and App Clip: Swift 6, SwiftUI, iOS 18, Swift Concurrency.
+- Full iPhone app: React Native 0.86, React 19, Expo SDK 57, and TypeScript.
+- App Clip: future native iOS companion target that reuses portable domain contracts where practical; excluded from the first JavaScript-only local preview.
 - Backend: Supabase hosted project.
 - Database: PostgreSQL.
 - Authentication: Supabase Auth with Apple and Google; Venmo identity/sign-in integration remains provider-dependent.
@@ -12,7 +13,7 @@ This document is the source of truth for data, services, financial rules, securi
 - Private receipt storage: Supabase Storage.
 - Administration: Supabase dashboard for MVP.
 
-Supabase SDK calls must remain behind application-owned repositories and services. SwiftUI views must not contain backend queries, authorization logic, or financial calculations.
+Supabase SDK calls must remain behind application-owned repositories and services. React Native components must not contain backend queries, authorization policy, or financial calculations.
 
 ## 2. Domain Model
 
@@ -156,9 +157,9 @@ DiviTests/
 DiviUITests/
 ```
 
-Share domain and presentation logic with the App Clip where size and platform constraints permit. Views primarily render state and forward intent. Use initializer/environment dependency injection, explicit errors, and independently testable domain types.
+Keep domain calculations framework-independent and share portable contracts with a future App Clip where size and platform constraints permit. Components primarily render state and forward intent. Use explicit dependency boundaries, explicit errors, and independently testable domain types.
 
-Prefer Apple frameworks and async/await. Avoid floating-point money, heavy DI/UI frameworks, unnecessary reactive layers, force unwraps in production paths, and provider-specific types escaping infrastructure boundaries.
+Prefer Expo-compatible libraries and standard promises. Avoid floating-point money, heavy DI/UI frameworks, unnecessary state layers, unchecked nullable values in production paths, and provider-specific types escaping infrastructure boundaries.
 
 ## 7. Realtime and Concurrency
 

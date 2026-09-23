@@ -120,11 +120,11 @@ Rules:
 
 ## 4. Typography
 
-Use SF Pro through SwiftUI semantic text styles and Dynamic Type. Match the references' confident, rounded system typography without bundling a lookalike font.
+Use the iOS system font through React Native text styles and respect dynamic text sizing. Match the references' confident, rounded system typography without bundling a lookalike font.
 
 Recommended hierarchy:
 
-| Role | SwiftUI baseline | Weight | Typical use |
+| Role | React Native baseline | Weight | Typical use |
 | --- | --- | --- | --- |
 | Display amount | 44–52 pt scalable | Regular/Medium | Final amount, amount owed, total receipt |
 | Screen title | 32–36 pt scalable | Bold | Home, Divi title, major sections |
