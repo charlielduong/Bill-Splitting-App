@@ -52,7 +52,7 @@ A Divi moves through `Draft → Claiming → Finalized → Settled`.
 
 1. The recipient scans the QR code or opens its link.
 2. Divi shows the merchant/title, creator, total, and current participant count.
-3. The recipient confirms a display name when needed and chooses **Join Divi**.
+3. The recipient confirms a display name when needed, may optionally provide a phone number and SMS consent, and chooses **Join Divi**.
 4. The participant and current claims synchronize.
 5. The participant enters item claiming.
 
@@ -87,6 +87,15 @@ Receipt values cannot change during Claiming. To correct them:
 4. Divi shows a final review containing the payer, receipt total, participants, items, adjustments, allocations, and any rounding remainders.
 5. The creator confirms.
 6. Claims become immutable, final allocations persist atomically, and all participants receive the Finalized state.
+
+### Send finalized totals by text (planned)
+
+1. After finalization, the creator opens the final review and chooses **Send totals to all**.
+2. Divi previews the recipients, phone-number consent status, final amount owed, and message contents before sending.
+3. The creator explicitly confirms the send. Participants without a phone number or SMS consent are excluded and clearly identified.
+4. Each eligible participant receives a text containing the Divi name, their claimed items with individual prices, their final total, and a tappable payment link when a supported Venmo identity/link is available.
+5. A participant who joined through the QR flow sees a confirmation such as “Thanks — we’ll text you when your total is ready” after saving their optional phone number.
+6. Divi records notification status separately from payment status. Sent, failed, and retrying messages are visible to the creator without implying that a Venmo request was submitted or that the balance was paid.
 
 ## 9. Review Final Allocation
 

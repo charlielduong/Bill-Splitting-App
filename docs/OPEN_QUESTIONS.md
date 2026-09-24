@@ -35,6 +35,15 @@ These decisions are intentionally unresolved. Defaults may be used for local dev
 - Does recording payment require confirmation from the other party?
 - How should overpayment be handled: reject, cap, or retain as a credit?
 
+## Totals Notifications and SMS
+
+- Which SMS provider and sending region are approved for production?
+- Is phone-number collection opt-in by default, and what consent, opt-out, quiet-hours, and message-frequency rules are required?
+- Should the creator send totals to all eligible participants at once, or be able to select recipients and retry failed sends individually?
+- What sender identity, message length, localization, and delivery-status detail should be used?
+- Which Venmo payment-link format is supported for a participant, and what fallback should be shown when only a username is available or deep-link fields are unsupported?
+- Should a participant be able to change or remove their phone number after joining but before finalization?
+
 ## Privacy and Operations
 
 - What are the production retention periods for receipts, parse metadata, financial history, and deleted-account data?
