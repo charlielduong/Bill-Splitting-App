@@ -182,6 +182,7 @@ The MVP supports:
 - Creator-controlled finalization.
 - Transparent participant allocation breakdowns.
 - **Request with Venmo** handoff for finalized balances, with recipient, exact amount, and Divi-derived note pre-populated when Venmo supports those fields.
+- Planned post-finalization **Send totals to all** flow: eligible participants may provide an opted-in phone number during QR join, and the creator can explicitly send each person a text with their claimed items, item prices, final total, and a supported Venmo payment link.
 - Full and partial repayment records.
 - Persistent history after settlement.
 
@@ -200,6 +201,7 @@ The complete lifecycle, entry paths, screen states, and recovery behavior are de
 - Divi records external repayment but does not move or verify funds.
 - Opening Venmo may mark a request as initiated, but only explicit confirmation (or a future verified provider integration) may mark a balance Paid.
 - External payment identities are optional; an explicit Venmo username is preferred over assuming that a phone number or email identifies the correct Venmo account.
+- Phone numbers are optional messaging destinations only and require explicit SMS consent; sending totals is separate from payment initiation and payment completion.
 - Invitations are scoped, revocable, and safely rejected when invalid.
 - Duplicate financial mutations must be idempotent.
 - Deleted accounts are anonymized without corrupting other participants' history.

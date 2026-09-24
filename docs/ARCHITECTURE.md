@@ -27,7 +27,7 @@ Stores creator, payer, currency, lifecycle state, version, source receipt, confi
 
 ### Participant
 
-Stores Divi/user or guest identity, display-name snapshot, join/leave status, and timestamps. Historical participants are never physically removed from financial history.
+Stores Divi/user or guest identity, display-name snapshot, optional phone number and SMS-consent state, join/leave status, and timestamps. Historical participants are never physically removed from financial history. A phone number is a messaging destination only; it is not treated as a verified Venmo identity.
 
 ### Receipt and parse attempt
 
@@ -93,6 +93,7 @@ Define replaceable protocols/interfaces for:
 - Invitation/deep-link resolution.
 - Allocation/finalization.
 - Venmo/external payment handoff.
+- SMS notification and delivery-status tracking.
 - Analytics and crash reporting.
 
 Receipt parsing must return proposed data with confidence/failure information. The manual editor remains available regardless of provider outcome.
@@ -110,6 +111,10 @@ External providers own:
 Define a provider-neutral handoff request containing transaction kind, explicit recipient identity when available, exact minor-unit amount and currency, and sanitized label. A Venmo adapter translates only fields supported by the installed/current integration. Unsupported fields must return a structured capability result so the UI can offer copyable values rather than silently dropping information.
 
 No adapter may automatically execute a transaction or treat app launch, request submission, or return-to-app as verified payment. Payment becomes Paid only through explicit authorized confirmation until a future provider offers reliable verification.
+
+### Finalized totals notification boundary
+
+After finalization, the creator may initiate a provider-backed **Send totals to all** operation. Divi prepares a recipient-specific message from immutable allocations: Divi name, claimed item names and prices, final amount owed, and a supported external-payment link when available. The notification service owns SMS transport, consent enforcement, delivery status, retry/idempotency keys, and provider error handling. It must not change claims, allocations, payment status, or settlement state. A Venmo link remains a user-controlled handoff; opening or tapping it never means that money was requested or paid.
 
 ## 5. Authorization and Security
 

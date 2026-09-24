@@ -17,6 +17,10 @@ The MVP is complete only when every applicable criterion below is demonstrably s
 - [ ] Finalization is blocked for unclaimed required items or failed financial invariants.
 - [ ] Successful finalization atomically persists immutable allocations.
 - [ ] Participants see a transparent final breakdown and who they owe.
+- [ ] After finalization, the creator can review and initiate a **Send totals to all** action for participants who have an opted-in phone number.
+- [ ] A totals message identifies the Divi, lists the recipient's claimed items and item prices, shows the final amount owed, and includes a tappable external-payment link when a supported Venmo identity/link is available.
+- [ ] Participants who joined through the QR flow can optionally provide a phone number, see a confirmation that their total will be texted when ready, and receive no message until the creator explicitly initiates the send-totals action.
+- [ ] SMS delivery is idempotent, records an auditable send status, and never marks a Venmo request or monetary obligation as paid.
 - [ ] The payer sees every reimbursement obligation and status.
 - [ ] A finalized balance owed to the current user displays **Request with Venmo** when an appropriate handoff is available.
 - [ ] Divi prefers an explicit participant Venmo username and never assumes a phone number or email is the correct Venmo account.
