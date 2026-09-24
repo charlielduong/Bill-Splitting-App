@@ -11,11 +11,14 @@ describe('finalizeAllocations', () => {
     expect(allocations.reduce((sum, allocation) => sum + allocation.total.minorUnits, 0)).toBe(
       8692,
     );
-    expect(allocations.every((allocation) => allocation.total.minorUnits > 0)).toBe(true);
+    expect(allocations.filter((allocation) => allocation.total.minorUnits > 0)).toHaveLength(3);
     expect(allocations.map((allocation) => allocation.participantId)).toEqual([
       'alex',
       'charlie',
+      'jordan',
+      'morgan',
       'sam',
+      'taylor',
     ]);
   });
 

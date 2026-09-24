@@ -19,12 +19,12 @@ import { Pill, PrimaryButton } from '../components/ui';
 import { finalizeAllocations } from '../domain/allocation';
 import {
   Allocation,
-  currentUser,
   Divi,
   formatMoney,
   money,
   Participant,
   ReceiptItem,
+  unclaimedAmount,
   unclaimedCount,
 } from '../domain/models';
 import { createVenmoRequest, VenmoHandoff } from '../services/venmo';
@@ -43,25 +43,45 @@ export function DiviDetailScreen({
   const [local, setLocal] = useState(divi);
   const [invite, setInvite] = useState(false);
   const [fallback, setFallback] = useState<VenmoHandoff | null>(null);
-  const [expandedItemIds, setExpandedItemIds] = useState<string[]>([]);
+  const [expandedItemIds, setExpandedItemIds] = useState<string[]>(
+    divi.items.map((item) => item.id),
+  );
   const inviteUrl = `https://divi.example/join/${local.id}`;
   const setAndPersist = (next: Divi) => {
     setLocal(next);
     onChange(next);
   };
-  const toggleClaim = (itemId: string) =>
+  const toggleClaim = (itemId: string, participantId: string) =>
     setAndPersist({
       ...local,
       items: local.items.map((item) =>
         item.id === itemId
           ? {
               ...item,
-              claimantIds: item.claimantIds.includes(currentUser.id)
-                ? item.claimantIds.filter((id) => id !== currentUser.id)
-                : [...item.claimantIds, currentUser.id],
+              claimantIds: item.claimantIds.includes(participantId)
+                ? item.claimantIds.filter((id) => id !== participantId)
+                : [...item.claimantIds, participantId],
             }
           : item,
       ),
+    });
+  const toggleEveryoneClaim = (itemId: string) =>
+    setAndPersist({
+      ...local,
+      items: local.items.map((item) => {
+        if (item.id !== itemId) return item;
+        const everyoneClaimed = local.participants.every((participant) =>
+          item.claimantIds.includes(participant.id),
+        );
+        return {
+          ...item,
+          claimantIds: everyoneClaimed
+            ? item.claimantIds.filter(
+                (id) => !local.participants.some((participant) => participant.id === id),
+              )
+            : local.participants.map((participant) => participant.id),
+        };
+      }),
     });
   const toggleExpanded = (itemId: string) =>
     setExpandedItemIds((current) =>
@@ -69,7 +89,7 @@ export function DiviDetailScreen({
         ? current.filter((candidate) => candidate !== itemId)
         : [...current, itemId],
     );
-  const finalize = () => {
+  const performFinalize = () => {
     try {
       setAndPersist({ ...local, allocations: finalizeAllocations(local), state: 'finalized' });
     } catch (error) {
@@ -80,6 +100,21 @@ export function DiviDetailScreen({
           : 'The receipt must reconcile first.',
       );
     }
+  };
+  const finalize = () => {
+    const remainingItems = unclaimedCount(local);
+    if (remainingItems > 0) {
+      Alert.alert(
+        'Items still unclaimed',
+        `${remainingItems} ${remainingItems === 1 ? 'item is' : 'items are'} still unclaimed. Would you still like to finalize?`,
+        [
+          { text: 'No', style: 'cancel' },
+          { text: 'Yes', style: 'destructive', onPress: performFinalize },
+        ],
+      );
+      return;
+    }
+    performFinalize();
   };
   const requestVenmo = async (allocation: Allocation, participant: Participant) => {
     const handoff = createVenmoRequest(
@@ -121,26 +156,30 @@ export function DiviDetailScreen({
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <Header title={local.title} onBack={onBack} />
-      <ScrollView>
-        <View style={styles.detailHero}>
-          <View style={styles.detailHeroCopy}>
-            <Text style={styles.heroEyebrow}>{local.state.toUpperCase()}</Text>
-            <Text style={styles.heroAmount}>{formatMoney(local.enteredTotal)}</Text>
-            <Text style={styles.heroCopy}>{unclaimedCount(local)} items unclaimed</Text>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open invite for ${local.title}`}
-            hitSlop={8}
-            onPress={() => setInvite(true)}
-            style={styles.heroQrAction}
-          >
-            <View style={styles.heroQrCard}>
-              <QRCode value={inviteUrl} size={108} color={colors.ink} backgroundColor="#FFFFFF" />
-            </View>
-            <Text style={styles.heroQrLabel}>Tap to invite</Text>
-          </Pressable>
+      <View style={styles.detailHero}>
+        <View style={styles.detailHeroCopy}>
+          <Text style={styles.heroEyebrow}>{local.state.toUpperCase()}</Text>
+          <Text style={styles.heroAmount}>{formatMoney(unclaimedAmount(local))}</Text>
+          <Text style={styles.heroCopy}>
+            {unclaimedCount(local) === 0
+              ? 'Nothing left to claim'
+              : `${unclaimedCount(local)} ${unclaimedCount(local) === 1 ? 'item' : 'items'} left to claim`}
+          </Text>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open invite for ${local.title}`}
+          hitSlop={8}
+          onPress={() => setInvite(true)}
+          style={styles.heroQrAction}
+        >
+          <View style={styles.heroQrCard}>
+            <QRCode value={inviteUrl} size={72} color={colors.ink} backgroundColor="#FFFFFF" />
+          </View>
+          <Text style={styles.heroQrLabel}>Invite to Divi</Text>
+        </Pressable>
+      </View>
+      <ScrollView contentContainerStyle={styles.detailScrollContent}>
         <View style={styles.listSection}>
           {local.items.map((item) => (
             <ClaimItem
@@ -149,17 +188,15 @@ export function DiviDetailScreen({
               participants={local.participants}
               expanded={expandedItemIds.includes(item.id)}
               onToggleExpanded={() => toggleExpanded(item.id)}
-              onToggleClaim={() => toggleClaim(item.id)}
+              onToggleClaim={(participantId) => toggleClaim(item.id, participantId)}
+              onToggleEveryone={() => toggleEveryoneClaim(item.id)}
             />
           ))}
         </View>
-        <View style={styles.finalizeSection}>
-          <PrimaryButton title="Finalize Divi" onPress={finalize} />
-          <Text style={styles.finalizeHint}>
-            Every item needs at least one claimant before finalizing.
-          </Text>
-        </View>
       </ScrollView>
+      <View style={styles.finalizeSection}>
+        <PrimaryButton title="Finalize Divi" onPress={finalize} />
+      </View>
       <InviteModal visible={invite} divi={local} onClose={() => setInvite(false)} />
       <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />
     </SafeAreaView>
@@ -172,16 +209,17 @@ function ClaimItem({
   expanded,
   onToggleExpanded,
   onToggleClaim,
+  onToggleEveryone,
 }: {
   item: ReceiptItem;
   participants: Participant[];
   expanded: boolean;
   onToggleExpanded: () => void;
-  onToggleClaim: () => void;
+  onToggleClaim: (participantId: string) => void;
+  onToggleEveryone: () => void;
 }) {
   const claimants = participants.filter((participant) => item.claimantIds.includes(participant.id));
   const everyoneClaimed = claimants.length === participants.length && participants.length > 0;
-  const currentUserClaimed = item.claimantIds.includes(currentUser.id);
   const claimSummary =
     claimants.length === 0
       ? 'Unclaimed'
@@ -211,42 +249,69 @@ function ClaimItem({
           />
         </Pressable>
         <Text style={styles.rowValue}>{formatMoney(item.amount)}</Text>
-        <Pressable
-          accessibilityRole="checkbox"
-          accessibilityState={{ checked: currentUserClaimed }}
-          accessibilityLabel={`${currentUserClaimed ? 'Remove' : 'Add'} your claim for ${item.name}`}
-          hitSlop={8}
-          onPress={onToggleClaim}
-          style={styles.claimToggle}
-        >
-          <Ionicons
-            name={currentUserClaimed ? 'checkmark-circle' : 'ellipse-outline'}
-            size={29}
-            color={currentUserClaimed ? colors.brand : colors.secondary}
-          />
-        </Pressable>
       </View>
       {expanded && (
         <View style={styles.claimantPanel}>
-          <Text style={styles.claimantPanelTitle}>Claimed by</Text>
-          {claimants.length === 0 ? (
-            <Text style={styles.rowSub}>No one has claimed this item yet.</Text>
-          ) : (
-            claimants.map((participant) => (
-              <View key={participant.id} style={styles.claimantRow}>
-                <View style={styles.claimantAvatar}>
-                  <Text style={styles.claimantInitial}>{participant.name.charAt(0)}</Text>
-                </View>
-                <Text style={[styles.rowSub, styles.flex]}>
-                  {participant.isCurrentUser ? `${participant.name} (you)` : participant.name}
-                </Text>
-                <Ionicons name="checkmark" size={18} color={colors.brandDeep} />
-              </View>
-            ))
-          )}
+          <Text style={styles.claimantPanelTitle}>Who is claiming this?</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.participantRail}
+          >
+            <ParticipantChoice everyone selected={everyoneClaimed} onPress={onToggleEveryone} />
+            {participants.map((participant) => (
+              <ParticipantChoice
+                key={participant.id}
+                participant={participant}
+                selected={item.claimantIds.includes(participant.id)}
+                onPress={() => onToggleClaim(participant.id)}
+              />
+            ))}
+          </ScrollView>
         </View>
       )}
     </View>
+  );
+}
+
+function ParticipantChoice({
+  participant,
+  everyone = false,
+  selected,
+  onPress,
+}: {
+  participant?: Participant;
+  everyone?: boolean;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const label = everyone ? 'Everyone' : participant?.isCurrentUser ? 'Me' : participant?.name;
+  return (
+    <Pressable
+      accessibilityRole="checkbox"
+      accessibilityState={{ checked: selected }}
+      accessibilityLabel={`${selected ? 'Remove' : 'Add'} ${label} for this item`}
+      onPress={onPress}
+      style={styles.participantChoice}
+    >
+      <View style={[styles.participantChoiceCircle, selected && styles.participantChoiceSelected]}>
+        {everyone ? (
+          <Ionicons
+            name="people-outline"
+            size={24}
+            color={selected ? colors.brandDeep : colors.secondary}
+          />
+        ) : (
+          <Text style={styles.participantChoiceInitial}>{participant?.name.charAt(0)}</Text>
+        )}
+      </View>
+      <Text
+        numberOfLines={1}
+        style={[styles.participantChoiceLabel, selected && styles.participantChoiceLabelSelected]}
+      >
+        {label}
+      </Text>
+    </Pressable>
   );
 }
 

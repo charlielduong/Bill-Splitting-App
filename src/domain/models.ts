@@ -65,6 +65,9 @@ export const currentUser: Participant = {
 };
 export const alex: Participant = { id: 'alex', name: 'Alex', venmoUsername: 'alex' };
 export const sam: Participant = { id: 'sam', name: 'Sam' };
+export const taylor: Participant = { id: 'taylor', name: 'Taylor' };
+export const jordan: Participant = { id: 'jordan', name: 'Jordan' };
+export const morgan: Participant = { id: 'morgan', name: 'Morgan' };
 
 export const sampleDinner = (state: DiviState = 'claiming'): Divi => ({
   id: `divi-${Date.now()}`,
@@ -73,7 +76,7 @@ export const sampleDinner = (state: DiviState = 'claiming'): Divi => ({
   state,
   creatorId: currentUser.id,
   payerId: currentUser.id,
-  participants: [currentUser, alex, sam],
+  participants: [currentUser, alex, sam, taylor, jordan, morgan],
   items: [
     {
       id: 'patatas',
@@ -117,6 +120,13 @@ export const calculatedTotal = (divi: Divi) =>
   adjustmentTotal(divi.discounts);
 export const unclaimedCount = (divi: Divi) =>
   divi.items.filter((item) => item.claimantIds.length === 0).length;
+export const unclaimedAmount = (divi: Divi) =>
+  money(
+    divi.items
+      .filter((item) => item.claimantIds.length === 0)
+      .reduce((sum, item) => sum + item.amount.minorUnits, 0),
+    divi.enteredTotal.currencyCode,
+  );
 export const paymentStatus = (allocation: Allocation): PaymentStatus =>
   allocation.paid.minorUnits <= 0
     ? 'outstanding'
