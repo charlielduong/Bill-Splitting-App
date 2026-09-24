@@ -1,5 +1,14 @@
-import React, { useState } from 'react';
-import { Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import {
+  Animated,
+  PanResponder,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
@@ -80,6 +89,7 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemDraft, setItemDraft] = useState({ name: '', quantity: '1', unitPrice: '' });
   const [itemError, setItemError] = useState<string | null>(null);
+  const [swipeActive, setSwipeActive] = useState(false);
   const [moneyDrafts, setMoneyDrafts] = useState({
     tax: (draft.tax.minorUnits / 100).toFixed(2),
     tip: (draft.tip.minorUnits / 100).toFixed(2),
@@ -173,6 +183,20 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
     setItemError(null);
   };
 
+  const removeItem = (itemId: string) => {
+    setLocal((current) => {
+      const removedItem = current.items.find((item) => item.id === itemId);
+      if (!removedItem) return current;
+
+      return {
+        ...current,
+        items: current.items.filter((item) => item.id !== itemId),
+        enteredTotal: money(current.enteredTotal.minorUnits - removedItem.amount.minorUnits),
+      };
+    });
+    if (editingItemId === itemId) cancelEdit();
+  };
+
   const updateTaxOrTip = (field: 'tax' | 'tip', text: string) => {
     setMoneyDrafts((current) => ({ ...current, [field]: text }));
     const parsed = Number.parseFloat(text);
@@ -259,11 +283,11 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.page} keyboardShouldPersistTaps="handled">
-      <Text style={styles.sectionTitle}>Confirm receipt</Text>
-      <Text style={styles.receiptInstructions}>
-        Check each item before you invite people to claim their share.
-      </Text>
+    <ScrollView
+      contentContainerStyle={styles.page}
+      keyboardShouldPersistTaps="handled"
+      scrollEnabled={!swipeActive}
+    >
       <TextInput
         accessibilityLabel="Divi name"
         style={styles.nameInput}
@@ -289,9 +313,16 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
             onChange={setItemDraft}
             onCancel={cancelEdit}
             onSave={saveItem}
+            onDelete={() => removeItem(item.id)}
           />
         ) : (
-          <ReceiptItemRow key={item.id} item={item} onEdit={() => beginEdit(item)} />
+          <SwipeableReceiptItem
+            key={item.id}
+            item={item}
+            onDelete={() => removeItem(item.id)}
+            onEdit={() => beginEdit(item)}
+            onSwipeActive={setSwipeActive}
+          />
         ),
       )}
       {editingItemId === 'new' && (
@@ -383,6 +414,88 @@ function ReceiptItemRow({ item, onEdit }: { item: ReceiptItem; onEdit: () => voi
       >
         <Ionicons name="pencil-sharp" size={22} color={colors.ink} />
       </Pressable>
+    </View>
+  );
+}
+
+function SwipeableReceiptItem({
+  item,
+  onEdit,
+  onDelete,
+  onSwipeActive,
+}: {
+  item: ReceiptItem;
+  onEdit: () => void;
+  onDelete: () => void;
+  onSwipeActive: (active: boolean) => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  const openRef = useRef(false);
+  const gestureStartX = useRef(0);
+  const translateRef = useRef(0);
+  const close = () => {
+    openRef.current = false;
+    translateRef.current = 0;
+    Animated.spring(translateX, {
+      toValue: 0,
+      useNativeDriver: false,
+      bounciness: 0,
+    }).start(() => onSwipeActive(false));
+  };
+  const openDelete = () => {
+    openRef.current = true;
+    translateRef.current = -92;
+    Animated.spring(translateX, {
+      toValue: -92,
+      useNativeDriver: false,
+      bounciness: 0,
+    }).start(() => onSwipeActive(false));
+  };
+  const panResponder = useRef(
+    PanResponder.create({
+      onPanResponderGrant: () => {
+        onSwipeActive(true);
+        gestureStartX.current = translateRef.current;
+      },
+      onMoveShouldSetPanResponder: (_, gesture) =>
+        Math.abs(gesture.dx) > 6 && Math.abs(gesture.dx) >= Math.abs(gesture.dy) * 0.55,
+      onMoveShouldSetPanResponderCapture: (_, gesture) =>
+        Math.abs(gesture.dx) > 6 && Math.abs(gesture.dx) >= Math.abs(gesture.dy) * 0.55,
+      onPanResponderMove: (_, gesture) => {
+        const nextX = Math.max(-92, Math.min(0, gestureStartX.current + gesture.dx));
+        translateRef.current = nextX;
+        translateX.setValue(nextX);
+      },
+      onPanResponderRelease: (_, gesture) => {
+        const currentX = gestureStartX.current + gesture.dx;
+        if (currentX < -46 || gesture.vx < -0.25) openDelete();
+        else close();
+      },
+      onPanResponderTerminate: () => {
+        if (translateRef.current < -46) openDelete();
+        else close();
+      },
+      onPanResponderTerminationRequest: () => false,
+    }),
+  ).current;
+
+  return (
+    <View style={styles.swipeableItem}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Delete ${item.name}`}
+        onPress={onDelete}
+        style={styles.swipeDeleteAction}
+      >
+        <Ionicons name="trash-outline" size={22} color={colors.surface} />
+        <Text style={styles.swipeDeleteLabel}>Delete</Text>
+      </Pressable>
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[styles.swipeableItemContent, { transform: [{ translateX }] }]}
+      >
+        <ReceiptItemRow item={item} onEdit={onEdit} />
+      </Animated.View>
     </View>
   );
 }
@@ -508,16 +621,31 @@ function ItemEditor({
   onChange,
   onCancel,
   onSave,
+  onDelete,
 }: {
   value: ItemDraft;
   error: string | null;
   onChange: (value: ItemDraft) => void;
   onCancel: () => void;
   onSave: () => void;
+  onDelete?: () => void;
 }) {
   return (
     <View style={styles.itemEditor}>
-      <Text style={styles.itemEditorTitle}>{value.name.trim() || 'New item'}</Text>
+      <View style={styles.itemEditorHeader}>
+        <Text style={[styles.itemEditorTitle, styles.flex]}>{value.name.trim() || 'New item'}</Text>
+        {onDelete && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Delete ${value.name || 'item'}`}
+            hitSlop={8}
+            onPress={onDelete}
+            style={styles.itemEditorDeleteButton}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.negative} />
+          </Pressable>
+        )}
+      </View>
       <Text style={styles.inputLabel}>Name</Text>
       <TextInput
         accessibilityLabel="Item name"

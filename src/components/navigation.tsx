@@ -69,24 +69,6 @@ function Tab({
     </Pressable>
   );
 }
-export function QuickAction({
-  icon,
-  label,
-  onPress,
-}: {
-  icon: keyof typeof Ionicons.glyphMap;
-  label: string;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable onPress={onPress} style={styles.quickAction}>
-      <View style={styles.quickCircle}>
-        <Ionicons name={icon} size={28} color="#FFFFFF" />
-      </View>
-      <Text style={styles.quickLabel}>{label}</Text>
-    </Pressable>
-  );
-}
 export function Header({
   title,
   onBack,

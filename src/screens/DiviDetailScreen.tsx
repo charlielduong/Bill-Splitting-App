@@ -14,7 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
-import { Header, QuickAction } from '../components/navigation';
+import { Header } from '../components/navigation';
 import { Pill, PrimaryButton } from '../components/ui';
 import { finalizeAllocations } from '../domain/allocation';
 import {
@@ -44,6 +44,7 @@ export function DiviDetailScreen({
   const [invite, setInvite] = useState(false);
   const [fallback, setFallback] = useState<VenmoHandoff | null>(null);
   const [expandedItemIds, setExpandedItemIds] = useState<string[]>([]);
+  const inviteUrl = `https://divi.example/join/${local.id}`;
   const setAndPersist = (next: Divi) => {
     setLocal(next);
     onChange(next);
@@ -97,18 +98,48 @@ export function DiviDetailScreen({
     if (handoff.url && (await Linking.canOpenURL(handoff.url))) await Linking.openURL(handoff.url);
     else setFallback(handoff);
   };
+
+  if (local.state === 'finalized') {
+    return (
+      <SafeAreaView style={styles.safe}>
+        <StatusBar style="dark" />
+        <Header title="Final balances" onBack={onBack} />
+        <ScrollView contentContainerStyle={styles.summaryPage}>
+          <View style={styles.summaryHero}>
+            <Text style={styles.summaryEyebrow}>{local.title}</Text>
+            <Text style={styles.summaryAmount}>{formatMoney(local.enteredTotal)}</Text>
+            <Text style={styles.summaryCopy}>Receipt finalized · ready to settle</Text>
+          </View>
+          <AllocationList divi={local} onRequest={requestVenmo} />
+        </ScrollView>
+        <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <Header title={local.title} onBack={onBack} />
       <ScrollView>
         <View style={styles.detailHero}>
-          <Text style={styles.heroEyebrow}>{local.state.toUpperCase()}</Text>
-          <Text style={styles.heroAmount}>{formatMoney(local.enteredTotal)}</Text>
-          <Text style={styles.heroCopy}>{unclaimedCount(local)} items unclaimed</Text>
-        </View>
-        <View style={styles.quickActions}>
-          <QuickAction icon="qr-code-outline" label="Invite" onPress={() => setInvite(true)} />
+          <View style={styles.detailHeroCopy}>
+            <Text style={styles.heroEyebrow}>{local.state.toUpperCase()}</Text>
+            <Text style={styles.heroAmount}>{formatMoney(local.enteredTotal)}</Text>
+            <Text style={styles.heroCopy}>{unclaimedCount(local)} items unclaimed</Text>
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open invite for ${local.title}`}
+            hitSlop={8}
+            onPress={() => setInvite(true)}
+            style={styles.heroQrAction}
+          >
+            <View style={styles.heroQrCard}>
+              <QRCode value={inviteUrl} size={108} color={colors.ink} backgroundColor="#FFFFFF" />
+            </View>
+            <Text style={styles.heroQrLabel}>Tap to invite</Text>
+          </Pressable>
         </View>
         <View style={styles.listSection}>
           {local.items.map((item) => (
@@ -122,15 +153,12 @@ export function DiviDetailScreen({
             />
           ))}
         </View>
-        {local.state === 'claiming' && (
-          <View style={styles.finalizeSection}>
-            <PrimaryButton title="Finalize Divi" onPress={finalize} />
-            <Text style={styles.finalizeHint}>
-              Every item needs at least one claimant before finalizing.
-            </Text>
-          </View>
-        )}
-        {local.state === 'finalized' && <AllocationList divi={local} onRequest={requestVenmo} />}
+        <View style={styles.finalizeSection}>
+          <PrimaryButton title="Finalize Divi" onPress={finalize} />
+          <Text style={styles.finalizeHint}>
+            Every item needs at least one claimant before finalizing.
+          </Text>
+        </View>
       </ScrollView>
       <InviteModal visible={invite} divi={local} onClose={() => setInvite(false)} />
       <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />
