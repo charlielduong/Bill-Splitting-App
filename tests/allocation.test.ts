@@ -29,4 +29,25 @@ describe('finalizeAllocations', () => {
     divi.enteredTotal = money(9999);
     expect(() => finalizeAllocations(divi)).toThrow('UNRECONCILED_TOTAL');
   });
+
+  it('includes fees and discounts while preserving the reconciled total', () => {
+    const divi = sampleDinner();
+    divi.items[2].claimantIds = [currentUser.id];
+    divi.fees = [
+      { id: 'service-fee', name: 'Service fee', amount: money(200) },
+      { id: 'card-fee', name: 'Credit card fee', amount: money(100) },
+    ];
+    divi.discounts = [{ id: 'employee-discount', name: 'Employee discount', amount: money(200) }];
+    divi.enteredTotal = money(8792);
+
+    const allocations = finalizeAllocations(divi);
+
+    expect(allocations.reduce((sum, allocation) => sum + allocation.total.minorUnits, 0)).toBe(
+      8792,
+    );
+    expect(allocations.reduce((sum, allocation) => sum + allocation.fees.minorUnits, 0)).toBe(300);
+    expect(allocations.reduce((sum, allocation) => sum + allocation.discounts.minorUnits, 0)).toBe(
+      200,
+    );
+  });
 });

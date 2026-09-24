@@ -2,6 +2,7 @@ export const colors = {
   brand: '#70CF45',
   brandDeep: '#2F8515',
   brandSoft: '#EFFAE9',
+  negativeSoft: '#FDEEEE',
   ink: '#111111',
   secondary: '#666666',
   tertiary: '#A8AAA8',

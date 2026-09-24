@@ -1,4 +1,4 @@
-import { Allocation, Divi, money } from './models';
+import { adjustmentTotal, Allocation, Divi, money } from './models';
 
 export type AllocationError = 'NO_PARTICIPANTS' | 'UNCLAIMED_ITEMS' | 'UNRECONCILED_TOTAL';
 
@@ -33,8 +33,8 @@ export const finalizeAllocations = (divi: Divi): Allocation[] => {
     divi.items.reduce((sum, item) => sum + item.amount.minorUnits, 0) +
     divi.tax.minorUnits +
     divi.tip.minorUnits +
-    divi.fees.minorUnits -
-    divi.discounts.minorUnits;
+    adjustmentTotal(divi.fees) -
+    adjustmentTotal(divi.discounts);
   if (calculated !== divi.enteredTotal.minorUnits)
     throw new Error('UNRECONCILED_TOTAL' satisfies AllocationError);
 
@@ -51,8 +51,8 @@ export const finalizeAllocations = (divi: Divi): Allocation[] => {
 
   const tax = distribute(divi.tax.minorUnits, items, ids);
   const tip = distribute(divi.tip.minorUnits, items, ids);
-  const fees = distribute(divi.fees.minorUnits, items, ids);
-  const discounts = distribute(divi.discounts.minorUnits, items, ids);
+  const fees = distribute(adjustmentTotal(divi.fees), items, ids);
+  const discounts = distribute(adjustmentTotal(divi.discounts), items, ids);
   return ids.map((participantId) => {
     const total =
       items[participantId] +
