@@ -384,12 +384,9 @@ export const appStyles = StyleSheet.create({
   },
   claimantPanel: {
     gap: spacing.sm,
-    paddingHorizontal: spacing.md,
     paddingTop: spacing.sm,
     paddingBottom: spacing.md,
     marginBottom: spacing.md,
-    borderRadius: radii.md,
-    backgroundColor: colors.surfaceMuted,
   },
   claimantPanelTitle: { color: colors.ink, ...typography.headline },
   participantRail: { gap: 12, paddingVertical: 12, paddingHorizontal: 2 },
