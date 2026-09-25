@@ -1,1 +1,1 @@
-export { default } from './src/DiviApp';
+export { default } from './divi_client/src/DiviApp';

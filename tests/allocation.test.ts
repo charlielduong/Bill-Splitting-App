@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { finalizeAllocations } from '../src/domain/allocation';
-import { alex, currentUser, money, sampleDinner } from '../src/domain/models';
+import { finalizeAllocations } from '../divi_client/src/domain/allocation';
+import { money } from '../divi_client/src/domain/models';
+import { alex, currentUser, sampleDinner } from './fixtures';
 
 describe('finalizeAllocations', () => {
   it('preserves every cent while splitting shared items and proportional extras', () => {
@@ -15,10 +16,7 @@ describe('finalizeAllocations', () => {
     expect(allocations.map((allocation) => allocation.participantId)).toEqual([
       'alex',
       'charlie',
-      'jordan',
-      'morgan',
       'sam',
-      'taylor',
     ]);
   });
 

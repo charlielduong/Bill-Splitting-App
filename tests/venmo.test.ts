@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { money, Participant } from '../src/domain/models';
-import { createVenmoRequest } from '../src/services/venmo';
+import { money, Participant } from '../divi_client/src/domain/models';
+import { createVenmoRequest } from '../divi_client/src/services/venmo';
 
 describe('createVenmoRequest', () => {
   it('builds a charge handoff with an exact amount and Divi note', () => {

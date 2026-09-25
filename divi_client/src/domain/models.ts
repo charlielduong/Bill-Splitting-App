@@ -57,57 +57,6 @@ export const formatMoney = ({ minorUnits, currencyCode }: Money) =>
     minorUnits / 100,
   );
 
-export const currentUser: Participant = {
-  id: 'charlie',
-  name: 'Charlie',
-  venmoUsername: 'charlie',
-  isCurrentUser: true,
-};
-export const alex: Participant = { id: 'alex', name: 'Alex', venmoUsername: 'alex' };
-export const sam: Participant = { id: 'sam', name: 'Sam' };
-export const taylor: Participant = { id: 'taylor', name: 'Taylor' };
-export const jordan: Participant = { id: 'jordan', name: 'Jordan' };
-export const morgan: Participant = { id: 'morgan', name: 'Morgan' };
-
-export const sampleDinner = (state: DiviState = 'claiming'): Divi => ({
-  id: `divi-${Date.now()}`,
-  title: 'Dinner at Barcelona',
-  date: new Date().toISOString(),
-  state,
-  creatorId: currentUser.id,
-  payerId: currentUser.id,
-  participants: [currentUser, alex, sam, taylor, jordan, morgan],
-  items: [
-    {
-      id: 'patatas',
-      name: 'Patatas bravas',
-      quantity: 1,
-      amount: money(1400),
-      claimantIds: [currentUser.id, alex.id],
-    },
-    {
-      id: 'paella',
-      name: 'Paella',
-      quantity: 1,
-      amount: money(4800),
-      claimantIds: [alex.id, sam.id],
-    },
-    {
-      id: 'water',
-      name: 'Sparkling water',
-      quantity: 1,
-      amount: money(700),
-      claimantIds: [],
-    },
-  ],
-  tax: money(592),
-  tip: money(1200),
-  fees: [],
-  discounts: [],
-  enteredTotal: money(8692),
-  allocations: [],
-});
-
 export const itemSubtotal = (divi: Divi) =>
   divi.items.reduce((sum, item) => sum + item.amount.minorUnits, 0);
 export const adjustmentTotal = (adjustments: ReceiptAdjustment[]) =>

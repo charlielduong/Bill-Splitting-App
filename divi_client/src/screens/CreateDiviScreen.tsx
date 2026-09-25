@@ -21,12 +21,28 @@ import {
   money,
   ReceiptAdjustment,
   ReceiptItem,
-  sampleDinner,
 } from '../domain/models';
 import { appStyles as styles } from '../theme/appStyles';
 import { colors, spacing } from '../theme/theme';
 
 type NamedAdjustmentDraft = ReceiptAdjustment & { amountText: string };
+
+const emptyDraft = (): Divi => ({
+  id: `divi-${Date.now()}`,
+  title: '',
+  date: new Date().toISOString(),
+  state: 'draft',
+  creatorId: '',
+  payerId: '',
+  participants: [],
+  items: [],
+  tax: money(0),
+  tip: money(0),
+  fees: [],
+  discounts: [],
+  enteredTotal: money(0),
+  allocations: [],
+});
 
 export function CreateDiviScreen({
   onClose,
@@ -47,7 +63,7 @@ export function CreateDiviScreen({
     }
     setStage('parsing');
     setTimeout(() => {
-      setDraft(sampleDinner('draft'));
+      setDraft(emptyDraft());
       setStage('review');
     }, 650);
   };
