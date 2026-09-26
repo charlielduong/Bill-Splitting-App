@@ -1,13 +1,17 @@
 import React, { useState } from 'react';
 import {
   Alert,
+  KeyboardAvoidingView,
   Linking,
   Modal,
+  Platform,
   Pressable,
   SafeAreaView,
   ScrollView,
   Share,
   Text,
+  TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
@@ -134,6 +138,26 @@ export function DiviDetailScreen({
     else setFallback(handoff);
   };
 
+  const addParticipant = (name: string, phoneNumber: string) => {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      Alert.alert('Add a person', 'Enter a full name to add this person to the Divi.');
+      return false;
+    }
+    setAndPersist({
+      ...local,
+      participants: [
+        ...local.participants,
+        {
+          id: `manual-${Date.now()}`,
+          name: trimmedName,
+          phoneNumber: phoneNumber.trim() || undefined,
+        },
+      ],
+    });
+    return true;
+  };
+
   if (local.state === 'finalized') {
     return (
       <SafeAreaView style={styles.safe}>
@@ -158,13 +182,19 @@ export function DiviDetailScreen({
       <Header title={local.title} onBack={onBack} />
       <View style={styles.detailHero}>
         <View style={styles.detailHeroCopy}>
-          <Text style={styles.heroEyebrow}>{local.state.toUpperCase()}</Text>
-          <Text style={styles.heroAmount}>{formatMoney(unclaimedAmount(local))}</Text>
-          <Text style={styles.heroCopy}>
-            {unclaimedCount(local) === 0
-              ? 'Nothing left to claim'
-              : `${unclaimedCount(local)} ${unclaimedCount(local) === 1 ? 'item' : 'items'} left to claim`}
+          <Text style={styles.heroEyebrow}>
+            {unclaimedCount(local) === 0 ? 'ALL ITEMS CLAIMED' : 'LEFT TO CLAIM'}
           </Text>
+          <Text style={styles.heroAmount}>{formatMoney(unclaimedAmount(local))}</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Manage ${local.participants.length} people in this Divi`}
+            hitSlop={8}
+            onPress={() => setInvite(true)}
+            style={styles.heroPeopleAction}
+          >
+            <ParticipantAvatarGroup participants={local.participants} />
+          </Pressable>
         </View>
         <Pressable
           accessibilityRole="button"
@@ -197,9 +227,36 @@ export function DiviDetailScreen({
       <View style={styles.finalizeSection}>
         <PrimaryButton title="Finalize Divi" onPress={finalize} />
       </View>
-      <InviteModal visible={invite} divi={local} onClose={() => setInvite(false)} />
+      <InviteModal
+        visible={invite}
+        divi={local}
+        onClose={() => setInvite(false)}
+        onAddParticipant={addParticipant}
+      />
       <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />
     </SafeAreaView>
+  );
+}
+
+function ParticipantAvatarGroup({ participants }: { participants: Participant[] }) {
+  const visibleParticipants = participants.slice(0, 4);
+  const remaining = participants.length - visibleParticipants.length;
+  return (
+    <View style={styles.heroPeopleGroup}>
+      {visibleParticipants.map((participant, index) => (
+        <View
+          key={participant.id}
+          style={[styles.heroPeopleAvatar, index > 0 && styles.heroPeopleAvatarOverlap]}
+        >
+          <Text style={styles.heroPeopleInitial}>{participant.name.charAt(0).toUpperCase()}</Text>
+        </View>
+      ))}
+      {remaining > 0 && (
+        <View style={[styles.heroPeopleAvatar, styles.heroPeopleAvatarOverlap]}>
+          <Text style={styles.heroPeopleInitial}>+{remaining}</Text>
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -352,26 +409,115 @@ function InviteModal({
   visible,
   divi,
   onClose,
+  onAddParticipant,
 }: {
   visible: boolean;
   divi: Divi;
   onClose: () => void;
+  onAddParticipant: (name: string, phoneNumber: string) => boolean;
 }) {
+  const [addingPerson, setAddingPerson] = useState(false);
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const { width } = useWindowDimensions();
   const url = `https://divi.example/join/${divi.id}`;
+  const qrSize = Math.min(220, Math.max(160, width - 96));
+  const closeAddPerson = () => {
+    setAddingPerson(false);
+    setName('');
+    setPhoneNumber('');
+  };
+  const submitParticipant = () => {
+    if (onAddParticipant(name, phoneNumber)) {
+      closeAddPerson();
+    }
+  };
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.safe}>
         <Header title="Invite" onBack={onClose} close />
-        <View style={styles.centerPage}>
+        <ScrollView contentContainerStyle={styles.invitePage}>
           <Text style={styles.pageTitle}>Join {divi.title}</Text>
           <View style={styles.qr}>
-            <QRCode value={url} size={220} />
+            <QRCode value={url} size={qrSize} />
           </View>
           <Text style={styles.centerCopy}>Scan to claim your items.</Text>
+          <View style={styles.peopleSection}>
+            <View style={styles.peopleSectionHeader}>
+              <View style={styles.rowCopy}>
+                <Text style={styles.sectionTitle}>People in this Divi</Text>
+                <Text style={styles.rowSub}>Add someone if they can’t scan the invite.</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add person manually"
+                onPress={() => setAddingPerson(true)}
+                style={styles.peopleHeaderAction}
+              >
+                <Ionicons name="person-add-outline" size={18} color={colors.brandDeep} />
+              </Pressable>
+            </View>
+            <View style={styles.peopleRail}>
+              {divi.participants.map((participant) => (
+                <View key={participant.id} style={styles.peoplePerson}>
+                  <View style={styles.peopleAvatar}>
+                    <Text style={styles.peopleAvatarInitial}>{participant.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                  <Text numberOfLines={1} style={styles.peopleName}>{participant.name}</Text>
+                  <Text style={styles.peopleSource}>
+                    {participant.phoneNumber || ''}
+                  </Text>
+                </View>
+              ))}
+            </View>
+            {addingPerson && (
+              <Modal visible transparent animationType="slide" onRequestClose={closeAddPerson}>
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+                  style={styles.modalBackdrop}
+                >
+                  <Pressable style={styles.modalDismissArea} onPress={closeAddPerson} />
+                  <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.sectionTitle}>Add person</Text>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Close add person form"
+                        hitSlop={8}
+                        onPress={closeAddPerson}
+                      >
+                        <Ionicons name="close" size={24} color={colors.ink} />
+                      </Pressable>
+                    </View>
+                    <Text style={styles.formHint}>They can be assigned items from your phone.</Text>
+                    <TextInput
+                      autoFocus
+                      accessibilityLabel="Full name"
+                      placeholder="Full name"
+                      placeholderTextColor={colors.tertiary}
+                      onChangeText={setName}
+                      value={name}
+                      style={styles.personInput}
+                    />
+                    <TextInput
+                      accessibilityLabel="Phone number"
+                      keyboardType="phone-pad"
+                      placeholder="Phone number"
+                      placeholderTextColor={colors.tertiary}
+                      onChangeText={setPhoneNumber}
+                      value={phoneNumber}
+                      style={styles.personInput}
+                    />
+                    <PrimaryButton title="Add to Divi" onPress={submitParticipant} disabled={!name.trim()} />
+                  </Pressable>
+                </KeyboardAvoidingView>
+              </Modal>
+            )}
+          </View>
           <View style={styles.bottomActions}>
             <PrimaryButton title="Share invite" onPress={() => Share.share({ message: url })} />
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     </Modal>
   );
