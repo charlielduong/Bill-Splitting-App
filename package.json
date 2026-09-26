@@ -5,16 +5,19 @@
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@expo/vector-icons": "^15.0.2",
+    "@supabase/supabase-js": "^2.117.2",
     "expo": "~57.0.24",
     "expo-clipboard": "~57.0.2",
     "expo-image-picker": "~57.0.19",
     "expo-linking": "~57.0.10",
+    "expo-sqlite": "~57.0.3",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
     "react-native-qrcode-svg": "^6.3.26",
     "react-native-svg": "15.15.4",
+    "react-native-url-polyfill": "^4.0.0",
     "react-native-web": "^0.21.2"
   },
   "devDependencies": {
@@ -33,7 +36,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "export:web": "expo export --platform web"
+    "export:web": "expo export --platform web",
+    "supabase:start": "npx supabase start",
+    "supabase:stop": "npx supabase stop",
+    "supabase:reset": "npx supabase db reset",
+    "supabase:status": "npx supabase status"
   },
   "private": true
 }

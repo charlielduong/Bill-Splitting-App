@@ -18,6 +18,29 @@ npm run ios
 npm run web
 ```
 
+## Local Supabase
+
+This project includes the Supabase CLI configuration for a Docker-backed local stack. Make sure
+Docker Desktop is running, then start Supabase with:
+
+```sh
+npm run supabase:start
+```
+
+The local API is available at `http://127.0.0.1:54321`, Studio at
+`http://127.0.0.1:54323`, and Postgres at `127.0.0.1:54322`. The CLI applies migrations from
+`supabase/migrations` and seed data from `supabase/seed.sql`.
+
+After the first start, copy the generated publishable key into `.env`:
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
+EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local-key-from-supabase-start>
+```
+
+Use `npm run supabase:stop` to stop the containers, `npm run supabase:status` to inspect them, and
+`npm run supabase:reset` to recreate the database from migrations and seed data.
+
 Choose **Try local demo** on the welcome screen.
 
 ## What is ready to review
