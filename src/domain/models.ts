@@ -5,6 +5,7 @@ export type Money = { minorUnits: number; currencyCode: string };
 export type Participant = {
   id: string;
   name: string;
+  phoneNumber?: string;
   venmoUsername?: string;
   isCurrentUser?: boolean;
 };
