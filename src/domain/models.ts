@@ -47,6 +47,7 @@ export type Divi = {
   discounts: ReceiptAdjustment[];
   enteredTotal: Money;
   allocations: Allocation[];
+  receiptImageUri?: string;
 };
 
 export const money = (minorUnits: number, currencyCode = 'USD'): Money => ({

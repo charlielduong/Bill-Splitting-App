@@ -5,16 +5,19 @@ import { colors, radii, typography } from '../theme/theme';
 export const PrimaryButton = ({
   title,
   onPress,
+  onPressIn,
   disabled,
 }: {
   title: string;
   onPress: () => void;
+  onPressIn?: () => void;
   disabled?: boolean;
 }) => (
   <Pressable
     accessibilityRole="button"
     disabled={disabled}
     onPress={onPress}
+    onPressIn={onPressIn}
     style={({ pressed }) => [styles.button, (pressed || disabled) && styles.buttonMuted]}
   >
     <Text style={styles.buttonText}>{title}</Text>
