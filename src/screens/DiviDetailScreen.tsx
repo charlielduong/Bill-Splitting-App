@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   Alert,
   KeyboardAvoidingView,
+  Keyboard,
   Linking,
   Modal,
   Platform,
@@ -19,6 +20,7 @@ import * as Clipboard from 'expo-clipboard';
 import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/navigation';
+import { ReceiptPeek } from '../components/ReceiptPeek';
 import { Pill, PrimaryButton } from '../components/ui';
 import { finalizeAllocations } from '../domain/allocation';
 import {
@@ -227,6 +229,7 @@ export function DiviDetailScreen({
       <View style={styles.finalizeSection}>
         <PrimaryButton title="Finalize Divi" onPress={finalize} />
       </View>
+      <ReceiptPeek imageUri={local.receiptImageUri} />
       <InviteModal
         visible={invite}
         divi={local}
@@ -423,6 +426,7 @@ function InviteModal({
   const url = `https://divi.example/join/${divi.id}`;
   const qrSize = Math.min(220, Math.max(160, width - 96));
   const closeAddPerson = () => {
+    Keyboard.dismiss();
     setAddingPerson(false);
     setName('');
     setPhoneNumber('');
@@ -461,12 +465,14 @@ function InviteModal({
               {divi.participants.map((participant) => (
                 <View key={participant.id} style={styles.peoplePerson}>
                   <View style={styles.peopleAvatar}>
-                    <Text style={styles.peopleAvatarInitial}>{participant.name.charAt(0).toUpperCase()}</Text>
+                    <Text style={styles.peopleAvatarInitial}>
+                      {participant.name.charAt(0).toUpperCase()}
+                    </Text>
                   </View>
-                  <Text numberOfLines={1} style={styles.peopleName}>{participant.name}</Text>
-                  <Text style={styles.peopleSource}>
-                    {participant.phoneNumber || ''}
+                  <Text numberOfLines={1} style={styles.peopleName}>
+                    {participant.name}
                   </Text>
+                  <Text style={styles.peopleSource}>{participant.phoneNumber || ''}</Text>
                 </View>
               ))}
             </View>
@@ -476,7 +482,7 @@ function InviteModal({
                   behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
                   style={styles.modalBackdrop}
                 >
-                  <Pressable style={styles.modalDismissArea} onPress={closeAddPerson} />
+                  <Pressable style={styles.modalDismissArea} onPressIn={closeAddPerson} />
                   <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
                     <View style={styles.titleRow}>
                       <Text style={styles.sectionTitle}>Add person</Text>
@@ -484,7 +490,7 @@ function InviteModal({
                         accessibilityRole="button"
                         accessibilityLabel="Close add person form"
                         hitSlop={8}
-                        onPress={closeAddPerson}
+                        onPressIn={closeAddPerson}
                       >
                         <Ionicons name="close" size={24} color={colors.ink} />
                       </Pressable>
@@ -508,7 +514,12 @@ function InviteModal({
                       value={phoneNumber}
                       style={styles.personInput}
                     />
-                    <PrimaryButton title="Add to Divi" onPress={submitParticipant} disabled={!name.trim()} />
+                    <PrimaryButton
+                      title="Add to Divi"
+                      onPress={submitParticipant}
+                      onPressIn={Keyboard.dismiss}
+                      disabled={!name.trim()}
+                    />
                   </Pressable>
                 </KeyboardAvoidingView>
               </Modal>

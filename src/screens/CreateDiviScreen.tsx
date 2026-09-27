@@ -1,6 +1,8 @@
 import React, { useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Animated,
+  Image,
   PanResponder,
   Pressable,
   SafeAreaView,
@@ -11,8 +13,10 @@ import {
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import * as ImagePicker from 'expo-image-picker';
+import { recognizeText } from 'expo-ocr-kit';
 import { Ionicons } from '@expo/vector-icons';
 import { Header, TotalRow } from '../components/navigation';
+import { ReceiptPeek } from '../components/ReceiptPeek';
 import { PrimaryButton } from '../components/ui';
 import {
   calculatedTotal,
@@ -21,8 +25,12 @@ import {
   money,
   ReceiptAdjustment,
   ReceiptItem,
-  sampleDinner,
 } from '../domain/models';
+import {
+  emptyReceiptDraft,
+  parseReceiptText,
+  receiptDraftFromParsed,
+} from '../services/receiptParser';
 import { appStyles as styles } from '../theme/appStyles';
 import { colors, spacing } from '../theme/theme';
 
@@ -35,22 +43,86 @@ export function CreateDiviScreen({
   onClose: () => void;
   onCreate: (divi: Divi) => void;
 }) {
-  const [stage, setStage] = useState<'source' | 'parsing' | 'review'>('source');
+  const [stage, setStage] = useState<'source' | 'confirm' | 'parsing' | 'review'>('source');
+  const [receiptImageUri, setReceiptImageUri] = useState<string | null>(null);
   const [draft, setDraft] = useState<Divi | null>(null);
-  const parse = async (pickImage: boolean) => {
-    if (pickImage) {
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        quality: 0.8,
-      });
-      if (result.canceled) return;
+  const [sourceError, setSourceError] = useState<string | null>(null);
+  const [parseNotice, setParseNotice] = useState<string | null>(null);
+
+  const selectReceipt = async (source: 'camera' | 'library') => {
+    setSourceError(null);
+    try {
+      if (source === 'camera') {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setSourceError(
+            'Camera access is needed to photograph a receipt. Enable it in Settings and try again.',
+          );
+          return;
+        }
+      }
+
+      const result =
+        source === 'camera'
+          ? await ImagePicker.launchCameraAsync({
+              mediaTypes: ['images'],
+              quality: 1,
+            })
+          : await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ['images'],
+              quality: 1,
+            });
+      if (result.canceled || !result.assets[0]?.uri) {
+        return;
+      }
+
+      setReceiptImageUri(result.assets[0].uri);
+      setStage('confirm');
+    } catch {
+      setSourceError('The receipt image could not be opened. Please try again.');
     }
-    setStage('parsing');
-    setTimeout(() => {
-      setDraft(sampleDinner('draft'));
-      setStage('review');
-    }, 650);
   };
+
+  const scanReceipt = async () => {
+    if (!receiptImageUri) return;
+    setStage('parsing');
+    setParseNotice(null);
+    try {
+      const result = await recognizeText(receiptImageUri);
+      const parsed = parseReceiptText(result.text, result.blocks);
+      setDraft(receiptDraftFromParsed(parsed, receiptImageUri));
+      if (parsed.items.length === 0) {
+        setParseNotice(
+          'No line items were recognized. The image is attached, so you can add the items manually below.',
+        );
+      } else if (parsed.totalMinorUnits === undefined) {
+        setParseNotice('The total was not recognized. Please verify and enter the receipt total.');
+      }
+      setStage('review');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '';
+      const needsDevelopmentBuild = /native module|development build|expo go/i.test(message);
+      setDraft(emptyReceiptDraft(receiptImageUri));
+      setParseNotice(
+        needsDevelopmentBuild
+          ? 'On-device scanning needs the Divi development build. You can still enter this receipt manually.'
+          : 'This image could not be read automatically. You can still enter the receipt manually.',
+      );
+      setStage('review');
+    }
+  };
+
+  const startManual = () => {
+    setDraft(emptyReceiptDraft());
+    setParseNotice('Manual receipt: add each item and enter the printed total.');
+    setStage('review');
+  };
+
+  const retake = () => {
+    setReceiptImageUri(null);
+    setStage('source');
+  };
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
@@ -60,31 +132,67 @@ export function CreateDiviScreen({
           <Ionicons name="scan-outline" size={92} color={colors.brand} />
           <Text style={styles.pageTitle}>Add your receipt</Text>
           <Text style={styles.centerCopy}>
-            Choose a receipt from Photos, simulate a camera scan, or start manually.
+            Photograph a paper receipt or choose a clear image from Photos.
           </Text>
+          {sourceError && <Text style={styles.captureError}>{sourceError}</Text>}
           <View style={styles.bottomActions}>
-            <PrimaryButton title="Choose receipt" onPress={() => parse(true)} />
-            <Pressable onPress={() => parse(false)}>
-              <Text style={styles.secondaryLink}>Simulate camera scan</Text>
+            <PrimaryButton title="Take receipt photo" onPress={() => selectReceipt('camera')} />
+            <Pressable accessibilityRole="button" onPress={() => selectReceipt('library')}>
+              <Text style={styles.secondaryLink}>Choose from Photos</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={startManual}>
+              <Text style={styles.tertiaryLink}>Enter manually</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+      {stage === 'confirm' && receiptImageUri && (
+        <View style={styles.receiptConfirmPage}>
+          <Image
+            accessibilityLabel="Receipt photo preview"
+            resizeMode="contain"
+            source={{ uri: receiptImageUri }}
+            style={styles.receiptConfirmImage}
+          />
+          <View style={styles.receiptConfirmCopy}>
+            <Text style={styles.pageTitle}>Use this photo?</Text>
+            <Text style={styles.centerCopy}>
+              Make sure the full receipt is visible, upright, and easy to read.
+            </Text>
+          </View>
+          <View style={styles.bottomActions}>
+            <PrimaryButton title="Scan receipt" onPress={scanReceipt} />
+            <Pressable accessibilityRole="button" onPress={retake}>
+              <Text style={styles.secondaryLink}>Retake or choose another</Text>
             </Pressable>
           </View>
         </View>
       )}
       {stage === 'parsing' && (
         <View style={styles.centerPage}>
-          <Ionicons name="receipt-outline" size={76} color={colors.brand} />
+          <ActivityIndicator color={colors.brandDeep} size="large" />
           <Text style={styles.pageTitle}>Reading your receipt…</Text>
           <Text style={styles.centerCopy}>
-            You’ll review every item before anyone can claim it.
+            The image stays on this device. You’ll review every item before anyone can claim it.
           </Text>
         </View>
       )}
-      {stage === 'review' && draft && <ReceiptReview draft={draft} onConfirm={onCreate} />}
+      {stage === 'review' && draft && (
+        <ReceiptReview draft={draft} notice={parseNotice} onConfirm={onCreate} />
+      )}
     </SafeAreaView>
   );
 }
 
-function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Divi) => void }) {
+function ReceiptReview({
+  draft,
+  notice,
+  onConfirm,
+}: {
+  draft: Divi;
+  notice: string | null;
+  onConfirm: (divi: Divi) => void;
+}) {
   const [local, setLocal] = useState(draft);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemDraft, setItemDraft] = useState({ name: '', quantity: '1', unitPrice: '' });
@@ -105,7 +213,7 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
     })),
   });
   const subtotalMinorUnits = local.items.reduce((sum, item) => sum + item.amount.minorUnits, 0);
-  const reconciled = calculatedTotal(local) === local.enteredTotal.minorUnits;
+  const receiptTotal = money(calculatedTotal(local));
   const visibleMoneyDrafts = [
     moneyDrafts.tax,
     moneyDrafts.tip,
@@ -162,7 +270,6 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
 
     const lineAmount = Math.round(unitPrice * 100) * quantity;
     const existingItem = local.items.find((item) => item.id === editingItemId);
-    const previousAmount = existingItem?.amount.minorUnits ?? 0;
     const savedItem: ReceiptItem = {
       id: existingItem?.id ?? `item-${Date.now()}`,
       name,
@@ -174,43 +281,26 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
       ? local.items.map((item) => (item.id === existingItem.id ? savedItem : item))
       : [...local.items, savedItem];
 
-    setLocal({
-      ...local,
-      items,
-      enteredTotal: money(local.enteredTotal.minorUnits + lineAmount - previousAmount),
-    });
+    setLocal({ ...local, items });
     setEditingItemId(null);
     setItemError(null);
   };
 
   const removeItem = (itemId: string) => {
     setLocal((current) => {
-      const removedItem = current.items.find((item) => item.id === itemId);
-      if (!removedItem) return current;
-
-      return {
-        ...current,
-        items: current.items.filter((item) => item.id !== itemId),
-        enteredTotal: money(current.enteredTotal.minorUnits - removedItem.amount.minorUnits),
-      };
+      if (!current.items.some((item) => item.id === itemId)) return current;
+      return { ...current, items: current.items.filter((item) => item.id !== itemId) };
     });
     if (editingItemId === itemId) cancelEdit();
   };
 
-  const updateTaxOrTip = (field: 'tax' | 'tip', text: string) => {
+  const updateMoney = (field: 'tax' | 'tip', text: string) => {
     setMoneyDrafts((current) => ({ ...current, [field]: text }));
     const parsed = Number.parseFloat(text);
     if (!Number.isFinite(parsed) || parsed < 0) return;
 
     const nextMinorUnits = Math.round(parsed * 100);
-    setLocal((current) => {
-      const previousMinorUnits = current[field].minorUnits;
-      return {
-        ...current,
-        [field]: money(nextMinorUnits),
-        enteredTotal: money(current.enteredTotal.minorUnits + nextMinorUnits - previousMinorUnits),
-      };
-    });
+    setLocal((current) => ({ ...current, [field]: money(nextMinorUnits) }));
   };
 
   const addAdjustment = (kind: 'fees' | 'discounts') => {
@@ -248,16 +338,10 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
           ? money(Math.round(parsed * 100))
           : existing.amount;
       const nextName = patch.name ?? existing.name;
-      const direction = kind === 'discounts' ? -1 : 1;
-
       return {
         ...current,
         [kind]: current[kind].map((adjustment) =>
           adjustment.id === id ? { ...adjustment, name: nextName, amount: nextAmount } : adjustment,
-        ),
-        enteredTotal: money(
-          current.enteredTotal.minorUnits +
-            direction * (nextAmount.minorUnits - existing.amount.minorUnits),
         ),
       };
     });
@@ -271,125 +355,122 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
     setLocal((current) => {
       const existing = current[kind].find((adjustment) => adjustment.id === id);
       if (!existing) return current;
-      const direction = kind === 'discounts' ? -1 : 1;
       return {
         ...current,
         [kind]: current[kind].filter((adjustment) => adjustment.id !== id),
-        enteredTotal: money(
-          current.enteredTotal.minorUnits - direction * existing.amount.minorUnits,
-        ),
       };
     });
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.page}
-      keyboardShouldPersistTaps="handled"
-      scrollEnabled={!swipeActive}
-    >
-      <TextInput
-        accessibilityLabel="Divi name"
-        style={styles.nameInput}
-        value={local.title}
-        onChangeText={(title) => setLocal({ ...local, title })}
-      />
-      <View style={styles.receiptItemsHeader}>
-        <Text style={styles.receiptItemsTitle}>Items</Text>
-      </View>
-      {local.items.length === 0 && !editingItemId && (
-        <View style={styles.emptyItems}>
-          <Ionicons name="receipt-outline" size={32} color={colors.tertiary} />
-          <Text style={styles.emptyItemsTitle}>No items yet</Text>
-          <Text style={styles.rowSub}>Add the first item from this receipt.</Text>
+    <>
+      <ScrollView
+        contentContainerStyle={styles.page}
+        keyboardShouldPersistTaps="handled"
+        scrollEnabled={!swipeActive}
+      >
+        {notice && <Text style={styles.scanNotice}>{notice}</Text>}
+        <TextInput
+          accessibilityLabel="Divi name"
+          style={styles.nameInput}
+          value={local.title}
+          onChangeText={(title) => setLocal({ ...local, title })}
+        />
+        <View style={styles.receiptItemsHeader}>
+          <Text style={styles.receiptItemsTitle}>Items</Text>
         </View>
-      )}
-      {local.items.map((item) =>
-        editingItemId === item.id ? (
+        {local.items.length === 0 && !editingItemId && (
+          <View style={styles.emptyItems}>
+            <Ionicons name="receipt-outline" size={32} color={colors.tertiary} />
+            <Text style={styles.emptyItemsTitle}>No items yet</Text>
+            <Text style={styles.rowSub}>Add the first item from this receipt.</Text>
+          </View>
+        )}
+        {local.items.map((item) =>
+          editingItemId === item.id ? (
+            <ItemEditor
+              key={item.id}
+              value={itemDraft}
+              error={itemError}
+              onChange={setItemDraft}
+              onCancel={cancelEdit}
+              onSave={saveItem}
+              onDelete={() => removeItem(item.id)}
+            />
+          ) : (
+            <SwipeableReceiptItem
+              key={item.id}
+              item={item}
+              onDelete={() => removeItem(item.id)}
+              onEdit={() => beginEdit(item)}
+              onSwipeActive={setSwipeActive}
+            />
+          ),
+        )}
+        {editingItemId === 'new' && (
           <ItemEditor
-            key={item.id}
             value={itemDraft}
             error={itemError}
             onChange={setItemDraft}
             onCancel={cancelEdit}
             onSave={saveItem}
-            onDelete={() => removeItem(item.id)}
           />
-        ) : (
-          <SwipeableReceiptItem
-            key={item.id}
-            item={item}
-            onDelete={() => removeItem(item.id)}
-            onEdit={() => beginEdit(item)}
-            onSwipeActive={setSwipeActive}
+        )}
+        {!editingItemId && (
+          <Pressable accessibilityRole="button" onPress={beginAdd} style={styles.addItemButton}>
+            <Ionicons name="add-circle" size={21} color={colors.brandDeep} />
+            <Text style={styles.addItemLabel}>Add item</Text>
+          </Pressable>
+        )}
+        <View style={styles.totalBlock}>
+          <TotalRow label="Subtotal" value={money(subtotalMinorUnits)} />
+          <EditableMoneyRow
+            label="Tax"
+            percentage={percentageFromSubtotal(moneyDrafts.tax, subtotalMinorUnits)}
+            value={moneyDrafts.tax}
+            onChangeText={(value) => updateMoney('tax', value)}
           />
-        ),
-      )}
-      {editingItemId === 'new' && (
-        <ItemEditor
-          value={itemDraft}
-          error={itemError}
-          onChange={setItemDraft}
-          onCancel={cancelEdit}
-          onSave={saveItem}
-        />
-      )}
-      {!editingItemId && (
-        <Pressable accessibilityRole="button" onPress={beginAdd} style={styles.addItemButton}>
-          <Ionicons name="add-circle" size={21} color={colors.brandDeep} />
-          <Text style={styles.addItemLabel}>Add item</Text>
-        </Pressable>
-      )}
-      <View style={styles.totalBlock}>
-        <TotalRow label="Subtotal" value={money(subtotalMinorUnits)} />
-        <EditableMoneyRow
-          label="Tax"
-          percentage={percentageFromSubtotal(moneyDrafts.tax, subtotalMinorUnits)}
-          value={moneyDrafts.tax}
-          onChangeText={(value) => updateTaxOrTip('tax', value)}
-        />
-        <EditableMoneyRow
-          label="Tip"
-          percentage={percentageFromSubtotal(moneyDrafts.tip, subtotalMinorUnits)}
-          value={moneyDrafts.tip}
-          onChangeText={(value) => updateTaxOrTip('tip', value)}
-        />
-        {adjustmentDrafts.fees.map((fee) => (
-          <NamedAdjustmentRow
-            key={fee.id}
-            adjustment={fee}
-            kind="fee"
-            onChange={(patch) => updateNamedAdjustment('fees', fee.id, patch)}
-            onRemove={() => removeAdjustment('fees', fee.id)}
+          <EditableMoneyRow
+            label="Tip"
+            percentage={percentageFromSubtotal(moneyDrafts.tip, subtotalMinorUnits)}
+            value={moneyDrafts.tip}
+            onChangeText={(value) => updateMoney('tip', value)}
           />
-        ))}
-        {adjustmentDrafts.discounts.map((discount) => (
-          <NamedAdjustmentRow
-            key={discount.id}
-            adjustment={discount}
-            kind="discount"
-            onChange={(patch) => updateNamedAdjustment('discounts', discount.id, patch)}
-            onRemove={() => removeAdjustment('discounts', discount.id)}
-          />
-        ))}
-        <View style={styles.adjustmentActions}>
-          <AdjustmentButton label="Add fee" negative onPress={() => addAdjustment('fees')} />
-          <AdjustmentButton label="Add discount" onPress={() => addAdjustment('discounts')} />
+          {adjustmentDrafts.fees.map((fee) => (
+            <NamedAdjustmentRow
+              key={fee.id}
+              adjustment={fee}
+              kind="fee"
+              onChange={(patch) => updateNamedAdjustment('fees', fee.id, patch)}
+              onRemove={() => removeAdjustment('fees', fee.id)}
+            />
+          ))}
+          {adjustmentDrafts.discounts.map((discount) => (
+            <NamedAdjustmentRow
+              key={discount.id}
+              adjustment={discount}
+              kind="discount"
+              onChange={(patch) => updateNamedAdjustment('discounts', discount.id, patch)}
+              onRemove={() => removeAdjustment('discounts', discount.id)}
+            />
+          ))}
+          <View style={styles.adjustmentActions}>
+            <AdjustmentButton label="Add fee" negative onPress={() => addAdjustment('fees')} />
+            <AdjustmentButton label="Add discount" onPress={() => addAdjustment('discounts')} />
+          </View>
+          <TotalRow label="Receipt total" value={receiptTotal} strong />
         </View>
-        <TotalRow label="Receipt total" value={local.enteredTotal} strong />
-      </View>
-      {!adjustmentsValid && (
-        <Text style={styles.warning}>Enter valid tax, tip, fee, and discount details.</Text>
-      )}
-      {adjustmentsValid && !reconciled && (
-        <Text style={styles.warning}>Totals do not reconcile.</Text>
-      )}
-      <PrimaryButton
-        disabled={!reconciled || !adjustmentsValid}
-        title="Done"
-        onPress={() => onConfirm({ ...local, state: 'claiming' })}
-      />
-    </ScrollView>
+        {!adjustmentsValid && (
+          <Text style={styles.warning}>Enter valid tax, tip, fee, and discount details.</Text>
+        )}
+        <PrimaryButton
+          disabled={local.items.length === 0 || !adjustmentsValid}
+          title="Start claiming"
+          onPress={() => onConfirm({ ...local, enteredTotal: receiptTotal, state: 'claiming' })}
+        />
+      </ScrollView>
+      <ReceiptPeek imageUri={draft.receiptImageUri} />
+    </>
   );
 }
 
