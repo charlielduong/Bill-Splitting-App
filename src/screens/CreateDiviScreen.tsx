@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Animated,
   PanResponder,
@@ -27,6 +27,7 @@ import { appStyles as styles } from '../theme/appStyles';
 import { colors, spacing } from '../theme/theme';
 
 type NamedAdjustmentDraft = ReceiptAdjustment & { amountText: string };
+type ItemEditField = 'name' | 'quantity' | 'price';
 
 export function CreateDiviScreen({
   onClose,
@@ -87,6 +88,7 @@ export function CreateDiviScreen({
 function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Divi) => void }) {
   const [local, setLocal] = useState(draft);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editingItemField, setEditingItemField] = useState<ItemEditField>('name');
   const [itemDraft, setItemDraft] = useState({ name: '', quantity: '1', unitPrice: '' });
   const [itemError, setItemError] = useState<string | null>(null);
   const [swipeActive, setSwipeActive] = useState(false);
@@ -122,9 +124,10 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
       return Number.isFinite(parsed) && parsed >= 0;
     });
 
-  const beginEdit = (item: ReceiptItem) => {
+  const beginEdit = (item: ReceiptItem, field: ItemEditField = 'name') => {
     const quantity = Math.max(1, item.quantity);
     setEditingItemId(item.id);
+    setEditingItemField(field);
     setItemDraft({
       name: item.name,
       quantity: String(quantity),
@@ -135,6 +138,7 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
 
   const beginAdd = () => {
     setEditingItemId('new');
+    setEditingItemField('name');
     setItemDraft({ name: '', quantity: '1', unitPrice: '' });
     setItemError(null);
   };
@@ -309,6 +313,7 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
           <ItemEditor
             key={item.id}
             value={itemDraft}
+            focusField={editingItemField}
             error={itemError}
             onChange={setItemDraft}
             onCancel={cancelEdit}
@@ -320,7 +325,7 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
             key={item.id}
             item={item}
             onDelete={() => removeItem(item.id)}
-            onEdit={() => beginEdit(item)}
+            onEdit={(field) => beginEdit(item, field)}
             onSwipeActive={setSwipeActive}
           />
         ),
@@ -328,6 +333,7 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
       {editingItemId === 'new' && (
         <ItemEditor
           value={itemDraft}
+          focusField={editingItemField}
           error={itemError}
           onChange={setItemDraft}
           onCancel={cancelEdit}
@@ -395,24 +401,40 @@ function ReceiptReview({ draft, onConfirm }: { draft: Divi; onConfirm: (divi: Di
 
 type ItemDraft = { name: string; quantity: string; unitPrice: string };
 
-function ReceiptItemRow({ item, onEdit }: { item: ReceiptItem; onEdit: () => void }) {
+function ReceiptItemRow({
+  item,
+  onEdit,
+}: {
+  item: ReceiptItem;
+  onEdit: (field: ItemEditField) => void;
+}) {
   return (
     <View style={styles.receiptItemRow}>
-      <View style={styles.quantityBadge}>
-        <Text style={styles.quantityBadgeText}>{item.quantity}</Text>
-      </View>
-      <Text numberOfLines={2} style={[styles.rowTitle, styles.flex]}>
-        {item.name}
-      </Text>
-      <Text style={styles.rowValue}>{formatMoney(item.amount)}</Text>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Edit ${item.name}`}
-        hitSlop={10}
-        onPress={onEdit}
-        style={styles.editItemButton}
+        accessibilityLabel={`Edit quantity for ${item.name}`}
+        onPress={() => onEdit('quantity')}
+        style={styles.quantityBadge}
       >
-        <Ionicons name="pencil-sharp" size={22} color={colors.ink} />
+        <Text style={styles.quantityBadgeText}>{item.quantity}</Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Edit name for ${item.name}`}
+        onPress={() => onEdit('name')}
+        style={styles.itemNameTarget}
+      >
+        <Text numberOfLines={2} style={styles.rowTitle}>
+          {item.name}
+        </Text>
+      </Pressable>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Edit price for ${item.name}`}
+        onPress={() => onEdit('price')}
+        style={styles.itemPriceTarget}
+      >
+        <Text style={styles.rowValue}>{formatMoney(item.amount)}</Text>
       </Pressable>
     </View>
   );
@@ -425,7 +447,7 @@ function SwipeableReceiptItem({
   onSwipeActive,
 }: {
   item: ReceiptItem;
-  onEdit: () => void;
+  onEdit: (field: ItemEditField) => void;
   onDelete: () => void;
   onSwipeActive: (active: boolean) => void;
 }) {
@@ -617,6 +639,7 @@ function AdjustmentButton({
 
 function ItemEditor({
   value,
+  focusField,
   error,
   onChange,
   onCancel,
@@ -624,12 +647,27 @@ function ItemEditor({
   onDelete,
 }: {
   value: ItemDraft;
+  focusField: ItemEditField;
   error: string | null;
   onChange: (value: ItemDraft) => void;
   onCancel: () => void;
   onSave: () => void;
   onDelete?: () => void;
 }) {
+  const nameInputRef = useRef<TextInput>(null);
+  const quantityInputRef = useRef<TextInput>(null);
+  const priceInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    const inputRef = {
+      name: nameInputRef,
+      quantity: quantityInputRef,
+      price: priceInputRef,
+    }[focusField];
+    const frame = requestAnimationFrame(() => inputRef.current?.focus());
+    return () => cancelAnimationFrame(frame);
+  }, [focusField]);
+
   return (
     <View style={styles.itemEditor}>
       <View style={styles.itemEditorHeader}>
@@ -649,9 +687,9 @@ function ItemEditor({
       <Text style={styles.inputLabel}>Name</Text>
       <TextInput
         accessibilityLabel="Item name"
-        autoFocus
         placeholder="Enter item name"
         placeholderTextColor={colors.tertiary}
+        ref={nameInputRef}
         style={styles.itemInput}
         value={value.name}
         onChangeText={(name) => onChange({ ...value, name })}
@@ -662,6 +700,7 @@ function ItemEditor({
           <TextInput
             accessibilityLabel="Item quantity"
             keyboardType="number-pad"
+            ref={quantityInputRef}
             selectTextOnFocus
             style={styles.itemInput}
             value={value.quantity}
@@ -677,6 +716,7 @@ function ItemEditor({
               keyboardType="decimal-pad"
               placeholder="0.00"
               placeholderTextColor={colors.tertiary}
+              ref={priceInputRef}
               style={styles.priceInput}
               value={value.unitPrice}
               onChangeText={(unitPrice) => onChange({ ...value, unitPrice })}
