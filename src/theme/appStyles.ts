@@ -275,14 +275,8 @@ export const appStyles = StyleSheet.create({
     borderColor: colors.separator,
   },
   quantityBadgeText: { color: colors.ink, ...typography.headline },
-  editItemButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 20,
-    backgroundColor: colors.surfaceMuted,
-  },
+  itemNameTarget: { flex: 1, justifyContent: 'center', minWidth: 0 },
+  itemPriceTarget: { justifyContent: 'center', minWidth: 64, alignItems: 'flex-end' },
   itemEditor: {
     gap: 10,
     padding: spacing.md,
