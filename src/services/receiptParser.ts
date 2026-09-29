@@ -27,6 +27,8 @@ const paymentPattern =
   /\b(?:cash|visa|mastercard|amex|discover|credit|debit|tender|change|payment|paid|card|gift card)\b/i;
 const webOrIdentifierPattern =
   /(?:\b[a-z0-9-]+\.(?:com|net|org|io|co)\b|\b\+?\d[\d().\s-]{7,}\d\b|\b\d{5}(?:-\d{4})?\b|\b(?:order\s*#?|invoice\s*(?:number|#)?|receipt\s*#?)\b)/i;
+const merchantMarketingPattern =
+  /\b(?:every day|you get|thank you|welcome to|enjoyed your experience|let others know|leave us a review|scan the qr|visit us)\b/i;
 
 function normalizeLine(value: string) {
   return value
@@ -37,7 +39,10 @@ function normalizeLine(value: string) {
 }
 
 function parseMoneyAtEnd(line: string): MoneyMatch | null {
-  const match = line.match(moneyAtEnd);
+  // Grocery receipts often append a tax category (for example `4.99 B`) or
+  // mark a line discount as `0.50-B`. Treat that suffix as receipt metadata.
+  const valueLine = line.replace(/\s+(?:FT|[BT])$/i, '').replace(/([\d])-[BT]$/i, '$1-');
+  const match = valueLine.match(moneyAtEnd);
   if (!match || match.index === undefined) return null;
 
   const token = match[1];
@@ -47,7 +52,7 @@ function parseMoneyAtEnd(line: string): MoneyMatch | null {
 
   return {
     amountMinorUnits: Math.round(numeric * 100) * (negative ? -1 : 1),
-    prefix: line.slice(0, match.index).trim(),
+    prefix: valueLine.slice(0, match.index).trim(),
   };
 }
 
@@ -66,26 +71,25 @@ function displayName(value: string) {
 }
 
 function extractItem(prefix: string, amountMinorUnits: number) {
-  let quantity = 1;
+  // Keep the item label exactly as the receipt/OCR presents it. Receipt
+  // formats encode quantities, unit prices, weights, modifiers, and product
+  // codes in many incompatible ways. The one exception is an explicit
+  // quantity at the start of the row; expose that quantity to the review UI,
+  // but leave every other part of the label untouched. The trailing amount is
+  // the line total; do not try to interpret the rest of the label.
   let name = cleanLabel(prefix, 'Receipt item');
-
-  const multiplied = name.match(/^(\d+)\s*[xX@]\s*(?:\$?\d+(?:\.\d{2})\s+)?(.+)$/);
-  if (multiplied) {
-    quantity = Math.max(1, Number.parseInt(multiplied[1], 10));
-    name = multiplied[2];
-  } else {
-    const leadingQuantity = name.match(/^(\d+)\s+(.+)$/);
-    if (leadingQuantity && Number.parseInt(leadingQuantity[1], 10) <= 99) {
-      quantity = Math.max(1, Number.parseInt(leadingQuantity[1], 10));
-      name = leadingQuantity[2];
+  let quantity = 1;
+  const leadingQuantity = name.match(/^(\d+)\s*(?:[xX@]\s*)?(.+)$/);
+  if (leadingQuantity) {
+    const parsedQuantity = Number.parseInt(leadingQuantity[1], 10);
+    if (parsedQuantity >= 1 && parsedQuantity <= 99) {
+      quantity = parsedQuantity;
+      name = leadingQuantity[2].trim();
     }
   }
 
-  // Some receipts print quantity, name, unit price, then line total.
-  if (quantity > 1) name = name.replace(/\s+\$?\d+(?:\.\d{2})$/, '').trim();
-
   return {
-    name: displayName(name),
+    name,
     quantity,
     amountMinorUnits: Math.abs(amountMinorUnits),
   };
@@ -108,6 +112,11 @@ function merchantCandidate(line: string) {
   return (
     isPlausibleItemName(candidate) &&
     !parseMoneyAtEnd(candidate) &&
+    !/^\d+\s+.*\b(?:street|st\.?|drive|dr\.?|road|rd\.?|avenue|ave\.?|boulevard|blvd\.?|lane|ln\.?|highway|hwy\.?|parkway|pkwy\.?|court|ct\.?|way)\b/i.test(
+      candidate,
+    ) &&
+    !/\b(?:op\s*#|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4})/i.test(candidate) &&
+    !merchantMarketingPattern.test(candidate) &&
     !/\b(?:subtotal|total|tax|tip|fee)\b/i.test(candidate)
   );
 }
@@ -129,24 +138,37 @@ function firstMerchantLine(lines: string[], blocks: ReceiptOcrBlock[] = []) {
     }));
   });
 
-  // OCR block coordinates are image pixels with a top-left origin. Prefer a
-  // prominent centered heading before the first priced row. Short text at the
-  // extreme top is often phone or image-viewer chrome.
-  const maxX = Math.max(
-    ...positionedBlocks.map(({ boundingBox }) => boundingBox.x + boundingBox.width),
+  const typicalWidth = median(positionedBlocks.map(({ boundingBox }) => boundingBox.width));
+  const typicalHeight = median(positionedBlocks.map(({ boundingBox }) => boundingBox.height));
+  const rotated = typicalHeight > typicalWidth * 2;
+  const rowCenter = (boundingBox: ReceiptOcrBlock['boundingBox']) =>
+    rotated ? -(boundingBox.x + boundingBox.width / 2) : boundingBox.y + boundingBox.height / 2;
+  const columnCenter = (boundingBox: ReceiptOcrBlock['boundingBox']) =>
+    rotated ? boundingBox.y + boundingBox.height / 2 : boundingBox.x + boundingBox.width / 2;
+  const lineThickness = (boundingBox: ReceiptOcrBlock['boundingBox']) =>
+    rotated ? boundingBox.width : boundingBox.height;
+  const contentTop = Math.min(...positionedBlocks.map(({ boundingBox }) => rowCenter(boundingBox)));
+  const contentBottom = Math.max(
+    ...positionedBlocks.map(({ boundingBox }) => rowCenter(boundingBox)),
   );
-  const maxY = Math.max(
-    ...positionedBlocks.map(({ boundingBox }) => boundingBox.y + boundingBox.height),
+  const contentLeft = Math.min(
+    ...positionedBlocks.map(({ boundingBox }) => (rotated ? boundingBox.y : boundingBox.x)),
   );
-  const heights = positionedBlocks
-    .map(({ boundingBox }) => boundingBox.height)
-    .sort((a, b) => a - b);
-  const typicalHeight = heights[Math.floor(heights.length / 2)] || 1;
-  const firstPriceY = Math.min(
+  const contentRight = Math.max(
+    ...positionedBlocks.map(({ boundingBox }) =>
+      rotated ? boundingBox.y + boundingBox.height : boundingBox.x + boundingBox.width,
+    ),
+  );
+  const contentHeight = Math.max(1, contentBottom - contentTop);
+  const contentWidth = Math.max(1, contentRight - contentLeft);
+  const topHalfBoundary = contentTop + contentHeight / 2;
+  const typicalThickness =
+    median(positionedBlocks.map(({ boundingBox }) => lineThickness(boundingBox))) || 1;
+  const firstPriceRow = Math.min(
     ...positionedBlocks
       .filter(({ text }) => parseMoneyAtEnd(normalizeLine(text)))
-      .map(({ boundingBox }) => boundingBox.y),
-    maxY,
+      .map(({ boundingBox }) => rowCenter(boundingBox)),
+    contentBottom,
   );
 
   const ranked = positionedBlocks
@@ -154,22 +176,25 @@ function firstMerchantLine(lines: string[], blocks: ReceiptOcrBlock[] = []) {
       const line = normalizeLine(text);
       if (!merchantCandidate(line)) return null;
 
-      const centerX = boundingBox.x + boundingBox.width / 2;
-      const centered = 1 - Math.min(1, Math.abs(centerX - maxX / 2) / (maxX / 2 || 1));
+      const row = rowCenter(boundingBox);
+      if (row > topHalfBoundary) return null;
+
+      const centerX = columnCenter(boundingBox);
+      const receiptCenterX = contentLeft + contentWidth / 2;
+      const centered =
+        1 - Math.min(1, Math.abs(centerX - receiptCenterX) / (contentWidth / 2 || 1));
       const letterCount = line.match(/[A-Za-z]/g)?.length || 1;
       const uppercaseRatio = (line.match(/[A-Z]/g)?.length ?? 0) / letterCount;
-      const heightRatio = boundingBox.height / typicalHeight;
-      const relativeY = boundingBox.y / (maxY || 1);
-      const beforeItems = boundingBox.y < firstPriceY;
-      const atVeryTop = relativeY < 0.055;
+      const heightRatio = lineThickness(boundingBox) / typicalThickness;
+      const relativeY = (row - contentTop) / contentHeight;
+      const beforeItems = row < firstPriceRow;
       const score =
         Math.min(line.length, 32) / 32 +
         centered * 1.5 +
         uppercaseRatio * 1.5 +
         Math.min(heightRatio, 2.5) * 0.7 +
         (beforeItems ? 1 : -1) -
-        relativeY * 1.2 -
-        (atVeryTop && line.length < 16 ? 3 : 0);
+        relativeY * 1.2;
       return { line, score };
     })
     .filter((candidate): candidate is { line: string; score: number } => candidate !== null)
@@ -177,6 +202,140 @@ function firstMerchantLine(lines: string[], blocks: ReceiptOcrBlock[] = []) {
 
   const chosen = ranked[0]?.line ?? candidates[0];
   return chosen ? displayName(chosen) : 'Scanned receipt';
+}
+
+function median(values: number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+/**
+ * Reconstruct receipt rows when OCR returns the label and amount columns as
+ * separate observations. Some camera images carry rotation metadata that
+ * causes the native OCR boxes to arrive rotated: in that shape, x describes
+ * the visual row and y describes the visual column.
+ */
+function receiptLinesFromBlocks(blocks: ReceiptOcrBlock[]) {
+  const positioned = blocks
+    .map((block, index) => ({
+      index,
+      text: normalizeLine(block.text),
+      boundingBox: block.boundingBox,
+    }))
+    .filter(({ text, boundingBox }) =>
+      Boolean(
+        text &&
+        Number.isFinite(boundingBox.x) &&
+        Number.isFinite(boundingBox.y) &&
+        boundingBox.width > 0 &&
+        boundingBox.height > 0,
+      ),
+    );
+  if (positioned.length < 2) return null;
+
+  const typicalWidth = median(positioned.map(({ boundingBox }) => boundingBox.width));
+  const typicalHeight = median(positioned.map(({ boundingBox }) => boundingBox.height));
+  const rotated = typicalHeight > typicalWidth * 2;
+  const rowTolerance = Math.max(8, (rotated ? typicalWidth : typicalHeight) * 0.9);
+  const rowStart = ({ boundingBox }: (typeof positioned)[number]) =>
+    rotated ? boundingBox.x : boundingBox.y;
+  const columnStart = ({ boundingBox }: (typeof positioned)[number]) =>
+    rotated ? boundingBox.y : boundingBox.x;
+  const likelyItemLabels = positioned.filter(
+    ({ text }) =>
+      text.length >= 5 &&
+      /[A-Za-z]/.test(text) &&
+      !/^(?:WT|SC)\b/i.test(text) &&
+      !parseMoneyAtEnd(text) &&
+      !metadataPattern.test(text),
+  );
+  const itemColumnTolerance = Math.max(12, typicalWidth * 1.25);
+  const itemColumnClusters = likelyItemLabels.map(({ boundingBox }) => {
+    const start = rotated ? boundingBox.y : boundingBox.x;
+    const cluster = likelyItemLabels.filter(({ boundingBox: otherBox }) => {
+      const otherStart = rotated ? otherBox.y : otherBox.x;
+      return Math.abs(otherStart - start) <= itemColumnTolerance;
+    });
+    return { start, count: cluster.length };
+  });
+  const itemStartColumn = [...itemColumnClusters].sort((a, b) => b.count - a.count)[0]?.start;
+
+  const priceBlocks = positioned.filter(({ text }) => {
+    const moneyMatch = parseMoneyAtEnd(text);
+    return Boolean(moneyMatch && !moneyMatch.prefix);
+  });
+  const priceIndexes = new Set(priceBlocks.map(({ index }) => index));
+  const usedLabelIndexes = new Set<number>();
+  const matchedPriceIndexes = new Set<number>();
+  const reconstructed: Array<{
+    text: string;
+    row: number;
+    column: number;
+    index: number;
+  }> = [];
+
+  priceBlocks.forEach((priceBlock) => {
+    const candidates = positioned
+      .filter((candidate) => {
+        if (priceIndexes.has(candidate.index) || usedLabelIndexes.has(candidate.index))
+          return false;
+        if (!/[A-Za-z]/.test(candidate.text)) return false;
+        if (columnStart(candidate) >= columnStart(priceBlock)) return false;
+        const candidateAmount = parseMoneyAtEnd(priceBlock.text)?.amountMinorUnits ?? 0;
+        if (
+          candidateAmount >= 0 &&
+          itemStartColumn !== undefined &&
+          Math.abs(columnStart(candidate) - itemStartColumn) > itemColumnTolerance
+        )
+          return false;
+
+        const delta = rowStart(priceBlock) - rowStart(candidate);
+        return rotated ? delta >= 0 && delta <= rowTolerance : Math.abs(delta) <= rowTolerance;
+      })
+      .sort((left, right) => {
+        const leftDelta = Math.abs(rowStart(priceBlock) - rowStart(left));
+        const rightDelta = Math.abs(rowStart(priceBlock) - rowStart(right));
+        return leftDelta - rightDelta || right.text.length - left.text.length;
+      });
+
+    const labelBlock = candidates[0];
+    if (!labelBlock) return;
+
+    usedLabelIndexes.add(labelBlock.index);
+    matchedPriceIndexes.add(priceBlock.index);
+    reconstructed.push({
+      text: `${labelBlock.text} ${priceBlock.text}`,
+      row: rowStart(labelBlock),
+      column: columnStart(labelBlock),
+      index: labelBlock.index,
+    });
+  });
+
+  // Require more than one row match before preferring block geometry over the
+  // OCR engine's full-text ordering. A single accidental alignment should not
+  // change otherwise usable text parsing.
+  if (reconstructed.length < 2) return null;
+
+  positioned.forEach((block) => {
+    if (usedLabelIndexes.has(block.index) || matchedPriceIndexes.has(block.index)) return;
+    reconstructed.push({
+      text: block.text,
+      row: rowStart(block),
+      column: columnStart(block),
+      index: block.index,
+    });
+  });
+
+  reconstructed.sort((left, right) => {
+    const rowDifference = rotated ? right.row - left.row : left.row - right.row;
+    if (Math.abs(rowDifference) > rowTolerance / 2) return rowDifference;
+    const columnDifference = left.column - right.column;
+    return columnDifference || left.index - right.index;
+  });
+
+  return coalesceReceiptLines(reconstructed.map(({ text }) => text).join('\n'));
 }
 
 function coalesceReceiptLines(rawText: string) {
@@ -192,27 +351,10 @@ function coalesceReceiptLines(rawText: string) {
 
     // Vision commonly emits receipt columns as separate observations. Rejoin
     // a label or item with the amount on the same visual row.
-    if (!currentMoney && nextIsPriceOnly) {
+    if (nextIsPriceOnly && (!currentMoney || currentMoney.prefix)) {
       lines.push(`${line} ${nextLine}`);
       index += 1;
       continue;
-    }
-
-    // A quantity row may be emitted as "2 x Latte 4.50" followed by its 9.00
-    // line total. Keep both amounts so item extraction can retain quantity 2.
-    const quantityMatch = currentMoney?.prefix.match(/^(\d+)\s*[xX@]\s+/);
-    if (currentMoney && nextMoney && nextIsPriceOnly && quantityMatch) {
-      const quantity = Number.parseInt(quantityMatch[1], 10);
-      if (
-        quantity > 1 &&
-        Math.abs(
-          Math.abs(currentMoney.amountMinorUnits) * quantity - Math.abs(nextMoney.amountMinorUnits),
-        ) <= 1
-      ) {
-        lines.push(`${line} ${nextLine}`);
-        index += 1;
-        continue;
-      }
     }
 
     lines.push(line);
@@ -222,7 +364,8 @@ function coalesceReceiptLines(rawText: string) {
 }
 
 export function parseReceiptText(rawText: string, blocks: ReceiptOcrBlock[] = []): ParsedReceipt {
-  const lines = coalesceReceiptLines(rawText);
+  const blockLines = receiptLinesFromBlocks(blocks);
+  const lines = blockLines ?? coalesceReceiptLines(rawText);
   const parsed: ParsedReceipt = {
     title: firstMerchantLine(lines, blocks),
     items: [],
@@ -234,6 +377,19 @@ export function parseReceiptText(rawText: string, blocks: ReceiptOcrBlock[] = []
   let pendingItemName: string | null = null;
 
   lines.forEach((line) => {
+    // Store receipts often print the regular shelf price and savings as
+    // indented annotations beneath the actual item. These are not purchased
+    // line items (and the displayed savings may not be a separate adjustment
+    // to the receipt total), so discard the whole annotation row.
+    if (
+      /^(?:reg\b|regular\s+price\b|savings?\s+with\s+prime\b|you\s+saved\b|total\s+savings\b)/i.test(
+        line,
+      )
+    ) {
+      pendingItemName = null;
+      return;
+    }
+
     const moneyMatch = parseMoneyAtEnd(line);
 
     if (!moneyMatch) {
@@ -249,13 +405,13 @@ export function parseReceiptText(rawText: string, blocks: ReceiptOcrBlock[] = []
       pendingItemName = null;
       return;
     }
-    if (/\b(?:grand\s+total|amount\s+due|balance\s+due|total)\b/.test(classification)) {
+    if (/\b(?:grand\s+total|amount\s+due|balance(?:\s+due)?|net\s+sales|total)\b/.test(classification)) {
       parsed.totalMinorUnits = Math.abs(amount);
       pendingItemName = null;
       return;
     }
     if (/\b(?:sales\s+)?tax\b/.test(classification)) {
-      parsed.taxMinorUnits = Math.abs(amount);
+      parsed.taxMinorUnits += Math.abs(amount);
       pendingItemName = null;
       return;
     }
@@ -266,7 +422,7 @@ export function parseReceiptText(rawText: string, blocks: ReceiptOcrBlock[] = []
     }
     if (/\b(?:discount|coupon|promo|savings|markdown)\b/.test(classification)) {
       parsed.discounts.push({
-        name: displayName(cleanLabel(prefix, 'Discount')),
+        name: cleanLabel(prefix, 'Discount'),
         amountMinorUnits: Math.abs(amount),
       });
       pendingItemName = null;
@@ -274,7 +430,15 @@ export function parseReceiptText(rawText: string, blocks: ReceiptOcrBlock[] = []
     }
     if (/\b(?:fee|service\s+charge|delivery\s+charge|surcharge)\b/.test(classification)) {
       parsed.fees.push({
-        name: displayName(cleanLabel(prefix, 'Fee')),
+        name: displayName(prefix),
+        amountMinorUnits: Math.abs(amount),
+      });
+      pendingItemName = null;
+      return;
+    }
+    if (amount < 0) {
+      parsed.discounts.push({
+        name: cleanLabel(prefix, 'Discount'),
         amountMinorUnits: Math.abs(amount),
       });
       pendingItemName = null;

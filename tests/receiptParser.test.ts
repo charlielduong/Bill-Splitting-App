@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseReceiptText, receiptDraftFromParsed } from '../src/services/receiptParser';
 
 describe('receipt OCR parsing', () => {
-  it('extracts common item, quantity, adjustment, and total lines', () => {
+  it('extracts item labels, line totals, adjustments, and receipt total', () => {
     const parsed = parseReceiptText(`
       CORNER CAFE
       2 x Latte 4.50 9.00
@@ -16,7 +16,7 @@ describe('receipt OCR parsing', () => {
 
     expect(parsed.title).toBe('Corner Cafe');
     expect(parsed.items).toEqual([
-      { name: 'Latte', quantity: 2, amountMinorUnits: 900 },
+      { name: 'Latte 4.50', quantity: 2, amountMinorUnits: 900 },
       { name: 'Blueberry Muffin', quantity: 1, amountMinorUnits: 375 },
     ]);
     expect(parsed.taxMinorUnits).toBe(102);
@@ -59,7 +59,7 @@ describe('receipt OCR parsing', () => {
     `);
 
     expect(parsed.items).toEqual([
-      { name: 'Latte', quantity: 2, amountMinorUnits: 900 },
+      { name: 'Latte 4.50', quantity: 2, amountMinorUnits: 900 },
       { name: 'Blueberry Muffin', quantity: 1, amountMinorUnits: 375 },
     ]);
     expect(parsed.taxMinorUnits).toBe(102);
