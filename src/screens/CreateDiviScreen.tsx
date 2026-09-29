@@ -29,8 +29,10 @@ import {
 import {
   emptyReceiptDraft,
   parseReceiptText,
+  ReceiptOcrBlock,
   receiptDraftFromParsed,
 } from '../services/receiptParser';
+import { ReceiptDetectionScreen, ReceiptImageSize } from './ReceiptDetectionScreen';
 import { appStyles as styles } from '../theme/appStyles';
 import { colors, spacing } from '../theme/theme';
 
@@ -44,8 +46,15 @@ export function CreateDiviScreen({
   onClose: () => void;
   onCreate: (divi: Divi) => void;
 }) {
-  const [stage, setStage] = useState<'source' | 'confirm' | 'parsing' | 'review'>('source');
+  const [stage, setStage] = useState<'source' | 'confirm' | 'parsing' | 'detection' | 'review'>(
+    'source',
+  );
   const [receiptImageUri, setReceiptImageUri] = useState<string | null>(null);
+  const [receiptImageSize, setReceiptImageSize] = useState<ReceiptImageSize>({
+    width: 1,
+    height: 1,
+  });
+  const [ocrBlocks, setOcrBlocks] = useState<ReceiptOcrBlock[]>([]);
   const [draft, setDraft] = useState<Divi | null>(null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [parseNotice, setParseNotice] = useState<string | null>(null);
@@ -77,7 +86,9 @@ export function CreateDiviScreen({
         return;
       }
 
-      setReceiptImageUri(result.assets[0].uri);
+      const asset = result.assets[0];
+      setReceiptImageUri(asset.uri);
+      setReceiptImageSize({ width: asset.width, height: asset.height });
       setStage('confirm');
     } catch {
       setSourceError('The receipt image could not be opened. Please try again.');
@@ -92,6 +103,7 @@ export function CreateDiviScreen({
       const result = await recognizeText(receiptImageUri);
       const parsed = parseReceiptText(result.text, result.blocks);
       setDraft(receiptDraftFromParsed(parsed, receiptImageUri));
+      setOcrBlocks(result.blocks);
       if (parsed.items.length === 0) {
         setParseNotice(
           'No line items were recognized. The image is attached, so you can add the items manually below.',
@@ -99,17 +111,18 @@ export function CreateDiviScreen({
       } else if (parsed.totalMinorUnits === undefined) {
         setParseNotice('The total was not recognized. Please verify and enter the receipt total.');
       }
-      setStage('review');
+      setStage('detection');
     } catch (error) {
       const message = error instanceof Error ? error.message : '';
       const needsDevelopmentBuild = /native module|development build|expo go/i.test(message);
       setDraft(emptyReceiptDraft(receiptImageUri));
+      setOcrBlocks([]);
       setParseNotice(
         needsDevelopmentBuild
           ? 'On-device scanning needs the Divi development build. You can still enter this receipt manually.'
           : 'This image could not be read automatically. You can still enter the receipt manually.',
       );
-      setStage('review');
+      setStage('detection');
     }
   };
 
@@ -121,13 +134,14 @@ export function CreateDiviScreen({
 
   const retake = () => {
     setReceiptImageUri(null);
+    setOcrBlocks([]);
     setStage('source');
   };
 
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <Header title="Create Divi" onBack={onClose} close />
+      {stage !== 'detection' && <Header title="Create Divi" onBack={onClose} close />}
       {stage === 'source' && (
         <View style={styles.centerPage}>
           <Ionicons name="scan-outline" size={92} color={colors.brand} />
@@ -177,6 +191,16 @@ export function CreateDiviScreen({
             The image stays on this device. You’ll review every item before anyone can claim it.
           </Text>
         </View>
+      )}
+      {stage === 'detection' && receiptImageUri && draft && (
+        <ReceiptDetectionScreen
+          blocks={ocrBlocks}
+          draft={draft}
+          imageSize={receiptImageSize}
+          imageUri={receiptImageUri}
+          onBack={() => setStage('confirm')}
+          onConfirm={() => setStage('review')}
+        />
       )}
       {stage === 'review' && draft && (
         <ReceiptReview draft={draft} notice={parseNotice} onConfirm={onCreate} />
