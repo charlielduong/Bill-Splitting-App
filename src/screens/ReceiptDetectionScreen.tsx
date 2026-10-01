@@ -11,6 +11,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Divi } from '../domain/models';
 import { ReceiptOcrBlock } from '../services/receiptParser';
+import { normalizeOcrBlocksForDisplay } from '../services/receiptOcrGeometry';
 import { colors, radii, spacing, typography } from '../theme/theme';
 
 export type ReceiptImageSize = { width: number; height: number };
@@ -131,7 +132,7 @@ export function ReceiptDetectionScreen({
             })}
         </View>
 
-        <Pressable
+        {/* <Pressable
           accessibilityRole="button"
           accessibilityLabel={showFields ? 'Hide detected fields' : 'Show detected fields'}
           accessibilityState={{ expanded: showFields }}
@@ -148,7 +149,7 @@ export function ReceiptDetectionScreen({
           >
             {showFields ? 'Hide detected fields' : 'Show detected fields'}
           </Text>
-        </Pressable>
+        </Pressable> */}
 
         <Pressable
           accessibilityRole="button"
@@ -211,7 +212,7 @@ function buildDetectedFields(
       amountMinorUnits: discount.amount.minorUnits,
     })),
   ];
-  const lines = splitBlocksIntoLines(blocks);
+  const lines = splitBlocksIntoLines(normalizeOcrBlocksForDisplay(blocks, imageSize));
 
   return semanticFields.flatMap((field, index) => {
     if (field.category === 'tax') {
