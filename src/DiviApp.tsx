@@ -27,8 +27,7 @@ export default function DiviApp() {
   ]);
   const updateDivi = (next: Divi) =>
     setDivis((items) => items.map((item) => (item.id === next.id ? next : item)));
-  const createDivi = (next: Divi) => {
-    setDivis((items) => [next, ...items]);
+  const deleteDivi = (id: string) => setDivis((items) => items.filter((item) => item.id !== id));
     setActivity((items) => [`Created ${next.title}`, ...items]);
     setRoute({ name: 'detail', id: next.id });
   };
@@ -51,11 +50,9 @@ export default function DiviApp() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <View style={styles.app}>
-        {tab === 'home' && (
-          <HomeScreen divis={divis} onOpen={(id) => setRoute({ name: 'detail', id })} />
-        )}
+        {tab === 'home' && <HomeScreen divis={divis} onOpen={openDivi} onDelete={deleteDivi} />}
         {tab === 'receipts' && (
-          <ReceiptsScreen divis={divis} onOpen={(id) => setRoute({ name: 'detail', id })} />
+          <ReceiptsScreen divis={divis} onOpen={openDivi} onDelete={deleteDivi} />
         )}
         {tab === 'activity' && (
           <SimpleListScreen title="Activity" rows={activity} icon="time-outline" />
