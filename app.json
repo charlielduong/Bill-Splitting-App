@@ -9,7 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.divi.app"
+      "bundleIdentifier": "com.charlieduong.divi.receipts"
     },
     "android": {
       "adaptiveIcon": {
@@ -19,11 +19,25 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.divi.app"
+      "package": "com.charlieduong.divi.receipts"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": ["expo-image-picker", "expo-sqlite"]
+    "plugins": [
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow Divi to choose a receipt from your photos.",
+          "cameraPermission": "Allow Divi to photograph a receipt for bill splitting."
+        }
+      ],
+      [
+        "expo-ocr-kit",
+        {
+          "cameraPermission": "Allow Divi to photograph a receipt for bill splitting."
+        }
+      ]
+    ]
   }
 }

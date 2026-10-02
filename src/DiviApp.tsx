@@ -14,7 +14,7 @@ import {
 } from './screens/HomeScreens';
 import { appStyles as styles } from './theme/appStyles';
 
-type Route = { name: 'root' } | { name: 'create' } | { name: 'detail'; id: string };
+type Route = { name: 'root' } | { name: 'create'; draft?: Divi } | { name: 'detail'; id: string };
 
 export default function DiviApp() {
   const [authenticated, setAuthenticated] = useState(false);
@@ -27,15 +27,40 @@ export default function DiviApp() {
   ]);
   const updateDivi = (next: Divi) =>
     setDivis((items) => items.map((item) => (item.id === next.id ? next : item)));
-  const createDivi = (next: Divi) => {
-    setDivis((items) => [next, ...items]);
-    setActivity((items) => [`Created ${next.title}`, ...items]);
+  const deleteDivi = (id: string) => setDivis((items) => items.filter((item) => item.id !== id));
+  const saveDivi = (next: Divi) => {
+    setDivis((items) => {
+      const existing = items.some((item) => item.id === next.id);
+      return existing ? items.map((item) => (item.id === next.id ? next : item)) : [next, ...items];
+    });
+    if (!divis.some((item) => item.id === next.id)) {
+      setActivity((items) => [`Created ${next.title}`, ...items]);
+    }
     setRoute({ name: 'detail', id: next.id });
+  };
+  const saveProgress = (next: Divi) => {
+    setDivis((items) => {
+      const existing = items.some((item) => item.id === next.id);
+      return existing ? items.map((item) => (item.id === next.id ? next : item)) : [next, ...items];
+    });
+    setRoute({ name: 'root' });
+  };
+  const openDivi = (id: string) => {
+    const divi = divis.find((item) => item.id === id);
+    if (divi?.state === 'draft') setRoute({ name: 'create', draft: divi });
+    else setRoute({ name: 'detail', id });
   };
 
   if (!authenticated) return <WelcomeScreen onContinue={() => setAuthenticated(true)} />;
   if (route.name === 'create')
-    return <CreateDiviScreen onClose={() => setRoute({ name: 'root' })} onCreate={createDivi} />;
+    return (
+      <CreateDiviScreen
+        initialDraft={route.draft}
+        onClose={() => setRoute({ name: 'root' })}
+        onCreate={saveDivi}
+        onSave={saveProgress}
+      />
+    );
   if (route.name === 'detail') {
     const divi = divis.find((item) => item.id === route.id);
     if (divi)
@@ -43,6 +68,9 @@ export default function DiviApp() {
         <DiviDetailScreen
           divi={divi}
           onBack={() => setRoute({ name: 'root' })}
+          onBackToEdit={() => setRoute({ name: 'create', draft: divi })}
+          onAdjust={() => setRoute({ name: 'create', draft: divi })}
+          onSave={saveProgress}
           onChange={updateDivi}
         />
       );
@@ -51,11 +79,9 @@ export default function DiviApp() {
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
       <View style={styles.app}>
-        {tab === 'home' && (
-          <HomeScreen divis={divis} onOpen={(id) => setRoute({ name: 'detail', id })} />
-        )}
+        {tab === 'home' && <HomeScreen divis={divis} onOpen={openDivi} onDelete={deleteDivi} />}
         {tab === 'receipts' && (
-          <ReceiptsScreen divis={divis} onOpen={(id) => setRoute({ name: 'detail', id })} />
+          <ReceiptsScreen divis={divis} onOpen={openDivi} onDelete={deleteDivi} />
         )}
         {tab === 'activity' && (
           <SimpleListScreen title="Activity" rows={activity} icon="time-outline" />

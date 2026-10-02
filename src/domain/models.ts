@@ -5,6 +5,7 @@ export type Money = { minorUnits: number; currencyCode: string };
 export type Participant = {
   id: string;
   name: string;
+  phoneNumber?: string;
   venmoUsername?: string;
   isCurrentUser?: boolean;
 };
@@ -46,6 +47,7 @@ export type Divi = {
   discounts: ReceiptAdjustment[];
   enteredTotal: Money;
   allocations: Allocation[];
+  receiptImageUri?: string;
 };
 
 export const money = (minorUnits: number, currencyCode = 'USD'): Money => ({
