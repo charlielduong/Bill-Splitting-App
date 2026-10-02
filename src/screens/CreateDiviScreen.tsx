@@ -40,13 +40,21 @@ type ItemEditField = 'name' | 'quantity' | 'price';
 export function CreateDiviScreen({
   onClose,
   onCreate,
+  onSave,
+  initialDraft,
 }: {
   onClose: () => void;
   onCreate: (divi: Divi) => void;
+  onSave: (divi: Divi) => void;
+  initialDraft?: Divi;
 }) {
-  const [stage, setStage] = useState<'source' | 'confirm' | 'parsing' | 'review'>('source');
-  const [receiptImageUri, setReceiptImageUri] = useState<string | null>(null);
-  const [draft, setDraft] = useState<Divi | null>(null);
+  const [stage, setStage] = useState<'source' | 'confirm' | 'parsing' | 'review'>(
+    initialDraft ? 'review' : 'source',
+  );
+  const [receiptImageUri, setReceiptImageUri] = useState<string | null>(
+    initialDraft?.receiptImageUri ?? null,
+  );
+  const [draft, setDraft] = useState<Divi | null>(initialDraft ?? null);
   const [sourceError, setSourceError] = useState<string | null>(null);
   const [parseNotice, setParseNotice] = useState<string | null>(null);
 
@@ -179,7 +187,7 @@ export function CreateDiviScreen({
         </View>
       )}
       {stage === 'review' && draft && (
-        <ReceiptReview draft={draft} notice={parseNotice} onConfirm={onCreate} />
+        <ReceiptReview draft={draft} notice={parseNotice} onConfirm={onCreate} onSave={onSave} />
       )}
     </SafeAreaView>
   );
@@ -189,10 +197,12 @@ function ReceiptReview({
   draft,
   notice,
   onConfirm,
+  onSave,
 }: {
   draft: Divi;
   notice: string | null;
   onConfirm: (divi: Divi) => void;
+  onSave: (divi: Divi) => void;
 }) {
   const [local, setLocal] = useState(draft);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
@@ -369,9 +379,13 @@ function ReceiptReview({
   return (
     <>
       <ScrollView
+        style={styles.flex}
         contentContainerStyle={styles.page}
         keyboardShouldPersistTaps="handled"
         scrollEnabled={!swipeActive}
+        onTouchStart={() => {
+          if (editingItemId) cancelEdit();
+        }}
       >
         {notice && <Text style={styles.scanNotice}>{notice}</Text>}
         <TextInput
@@ -469,14 +483,36 @@ function ReceiptReview({
         {!adjustmentsValid && (
           <Text style={styles.warning}>Enter valid tax, tip, fee, and discount details.</Text>
         )}
-        <PrimaryButton
-          disabled={local.items.length === 0 || !adjustmentsValid}
-          title="Start claiming"
-          onPress={() => onConfirm({ ...local, enteredTotal: receiptTotal, state: 'claiming' })}
-        />
       </ScrollView>
+      <View style={styles.finalizeSection}>
+        <View style={styles.ctaRow}>
+          <SaveProgressButton
+            onPress={() => onSave({ ...local, enteredTotal: receiptTotal, state: 'draft' })}
+          />
+          <View style={styles.ctaButtonFlex}>
+            <PrimaryButton
+              disabled={local.items.length === 0 || !adjustmentsValid}
+              title="Start claiming"
+              onPress={() => onConfirm({ ...local, enteredTotal: receiptTotal, state: 'claiming' })}
+            />
+          </View>
+        </View>
+      </View>
       <ReceiptPeek imageUri={draft.receiptImageUri} />
     </>
+  );
+}
+
+function SaveProgressButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Save Divi progress"
+      onPress={onPress}
+      style={styles.saveProgressButton}
+    >
+      <Ionicons name="save-outline" size={24} color={colors.surface} />
+    </Pressable>
   );
 }
 
@@ -583,7 +619,7 @@ function SwipeableReceiptItem({
   ).current;
 
   return (
-    <View style={styles.swipeableItem}>
+    <View style={styles.swipeableItem} onTouchStart={(event) => event.stopPropagation()}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Delete ${item.name}`}
@@ -750,7 +786,7 @@ function ItemEditor({
   }, [focusField]);
 
   return (
-    <View style={styles.itemEditor}>
+    <View style={styles.itemEditor} onTouchStart={(event) => event.stopPropagation()}>
       <View style={styles.itemEditorHeader}>
         <Text style={[styles.itemEditorTitle, styles.flex]}>{value.name.trim() || 'New item'}</Text>
         {onDelete && (

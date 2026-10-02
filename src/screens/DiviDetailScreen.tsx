@@ -21,8 +21,8 @@ import QRCode from 'react-native-qrcode-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { Header } from '../components/navigation';
 import { ReceiptPeek } from '../components/ReceiptPeek';
-import { Pill, PrimaryButton } from '../components/ui';
-import { finalizeAllocations } from '../domain/allocation';
+import { PrimaryButton } from '../components/ui';
+import { allocationItemBreakdown, finalizeAllocations } from '../domain/allocation';
 import {
   Allocation,
   Divi,
@@ -40,14 +40,21 @@ import { colors } from '../theme/theme';
 export function DiviDetailScreen({
   divi,
   onBack,
+  onBackToEdit,
+  onAdjust,
+  onSave,
   onChange,
 }: {
   divi: Divi;
   onBack: () => void;
+  onBackToEdit: () => void;
+  onAdjust: () => void;
+  onSave: (divi: Divi) => void;
   onChange: (divi: Divi) => void;
 }) {
   const [local, setLocal] = useState(divi);
   const [invite, setInvite] = useState(false);
+  const [addPerson, setAddPerson] = useState(false);
   const [fallback, setFallback] = useState<VenmoHandoff | null>(null);
   const [expandedItemIds, setExpandedItemIds] = useState<string[]>(
     divi.items.map((item) => item.id),
@@ -164,7 +171,7 @@ export function DiviDetailScreen({
     return (
       <SafeAreaView style={styles.safe}>
         <StatusBar style="dark" />
-        <Header title="Final balances" onBack={onBack} />
+        <Header title="Final balances" onBack={onAdjust} />
         <ScrollView contentContainerStyle={styles.summaryPage}>
           <View style={styles.summaryHero}>
             <Text style={styles.summaryEyebrow}>{local.title}</Text>
@@ -173,7 +180,10 @@ export function DiviDetailScreen({
           </View>
           <AllocationList divi={local} onRequest={requestVenmo} />
         </ScrollView>
-        <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />
+        <View style={styles.finalizeSection}>
+          <PrimaryButton title="Done" onPress={onBack} />
+        </View>
+        {fallback && <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />}
       </SafeAreaView>
     );
   }
@@ -181,7 +191,7 @@ export function DiviDetailScreen({
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar style="dark" />
-      <Header title={local.title} onBack={onBack} />
+      <Header title={local.title} onBack={onBackToEdit} />
       <View style={styles.detailHero}>
         <View style={styles.detailHeroCopy}>
           <Text style={styles.heroEyebrow}>
@@ -222,21 +232,36 @@ export function DiviDetailScreen({
               onToggleExpanded={() => toggleExpanded(item.id)}
               onToggleClaim={(participantId) => toggleClaim(item.id, participantId)}
               onToggleEveryone={() => toggleEveryoneClaim(item.id)}
+              onAddPerson={() => setAddPerson(true)}
             />
           ))}
         </View>
       </ScrollView>
       <View style={styles.finalizeSection}>
-        <PrimaryButton title="Finalize Divi" onPress={finalize} />
+        <View style={styles.ctaRow}>
+          <SaveProgressButton onPress={() => onSave(local)} />
+          <View style={styles.ctaButtonFlex}>
+            <PrimaryButton title="Finalize Divi" onPress={finalize} />
+          </View>
+        </View>
       </View>
       <ReceiptPeek imageUri={local.receiptImageUri} />
-      <InviteModal
-        visible={invite}
-        divi={local}
-        onClose={() => setInvite(false)}
-        onAddParticipant={addParticipant}
-      />
-      <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />
+      {invite && (
+        <InviteModal
+          visible
+          divi={local}
+          onClose={() => setInvite(false)}
+          onAddParticipant={addParticipant}
+        />
+      )}
+      {addPerson && (
+        <AddPersonModal
+          visible
+          onClose={() => setAddPerson(false)}
+          onAddParticipant={addParticipant}
+        />
+      )}
+      {fallback && <FallbackModal handoff={fallback} onClose={() => setFallback(null)} />}
     </SafeAreaView>
   );
 }
@@ -270,6 +295,7 @@ function ClaimItem({
   onToggleExpanded,
   onToggleClaim,
   onToggleEveryone,
+  onAddPerson,
 }: {
   item: ReceiptItem;
   participants: Participant[];
@@ -277,6 +303,7 @@ function ClaimItem({
   onToggleExpanded: () => void;
   onToggleClaim: (participantId: string) => void;
   onToggleEveryone: () => void;
+  onAddPerson: () => void;
 }) {
   const claimants = participants.filter((participant) => item.claimantIds.includes(participant.id));
   const everyoneClaimed = claimants.length === participants.length && participants.length > 0;
@@ -327,6 +354,7 @@ function ClaimItem({
                 onPress={() => onToggleClaim(participant.id)}
               />
             ))}
+            <ParticipantChoice addPerson onPress={onAddPerson} />
           </ScrollView>
         </View>
       )}
@@ -337,20 +365,43 @@ function ClaimItem({
 function ParticipantChoice({
   participant,
   everyone = false,
-  selected,
+  addPerson = false,
+  selected = false,
   onPress,
 }: {
   participant?: Participant;
   everyone?: boolean;
-  selected: boolean;
+  addPerson?: boolean;
+  selected?: boolean;
   onPress: () => void;
 }) {
-  const label = everyone ? 'Everyone' : participant?.isCurrentUser ? 'Me' : participant?.name;
+  if (addPerson) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add person to Divi"
+        onPress={onPress}
+        style={styles.participantChoiceAdd}
+      >
+        <Ionicons name="add" size={28} color={colors.secondary} />
+      </Pressable>
+    );
+  }
+
+  const label = addPerson
+    ? 'Add person'
+    : everyone
+      ? 'Everyone'
+      : participant?.isCurrentUser
+        ? 'Me'
+        : participant?.name;
   return (
     <Pressable
-      accessibilityRole="checkbox"
-      accessibilityState={{ checked: selected }}
-      accessibilityLabel={`${selected ? 'Remove' : 'Add'} ${label} for this item`}
+      accessibilityRole="button"
+      accessibilityState={addPerson ? undefined : { checked: selected }}
+      accessibilityLabel={
+        addPerson ? 'Add person to Divi' : `${selected ? 'Remove' : 'Add'} ${label} for this item`
+      }
       onPress={onPress}
       style={styles.participantChoice}
     >
@@ -375,6 +426,19 @@ function ParticipantChoice({
   );
 }
 
+function SaveProgressButton({ onPress }: { onPress: () => void }) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Save Divi progress"
+      onPress={onPress}
+      style={styles.saveProgressButton}
+    >
+      <Ionicons name="save-outline" size={24} color={colors.surface} />
+    </Pressable>
+  );
+}
+
 function AllocationList({
   divi,
   onRequest,
@@ -382,32 +446,180 @@ function AllocationList({
   divi: Divi;
   onRequest: (allocation: Allocation, participant: Participant) => void;
 }) {
+  const [expandedParticipantIds, setExpandedParticipantIds] = useState<string[]>([]);
+  const copyDetails = async (allocation: Allocation, person: Participant) => {
+    const detailRows = getAllocationDetailRows(divi, allocation, person.id);
+    const details = [
+      `${person.name} owes ${formatMoney(allocation.total)} for ${divi.title}`,
+      ...detailRows.map(({ label, amount }) => `${label}: ${formatMoney(amount)}`),
+      `Total: ${formatMoney(allocation.total)}`,
+    ].join('\n');
+    await Clipboard.setStringAsync(details);
+    Alert.alert('Copied', 'Payment details copied to the clipboard.');
+  };
+
   return (
     <View style={styles.allocation}>
       <Text style={styles.sectionTitle}>Final balances</Text>
       {divi.allocations.map((allocation) => {
         const person = divi.participants.find((item) => item.id === allocation.participantId);
-        if (!person || person.id === divi.payerId) return null;
+        if (!person) return null;
+        const expanded = expandedParticipantIds.includes(person.id);
+        const itemBreakdown = allocationItemBreakdown(divi, person.id).filter(
+          ({ amount }) => amount.minorUnits !== 0,
+        );
+        const detailRows = getAllocationDetailRows(divi, allocation, person.id);
         return (
           <View key={allocation.participantId} style={styles.allocationItem}>
-            <View style={styles.titleRow}>
-              <Text style={styles.rowTitle}>{person.name}</Text>
-              <Text style={styles.rowValue}>{formatMoney(allocation.total)}</Text>
-            </View>
-            <Pill
-              title={allocation.requestInitiated ? 'Request initiated' : 'Outstanding'}
-              tone={allocation.requestInitiated ? 'orange' : 'green'}
-            />
-            <PrimaryButton
-              title="Request with Venmo"
-              onPress={() => onRequest(allocation, person)}
-            />
+            {itemBreakdown.length > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${expanded ? 'Hide' : 'Show'} details for ${person.name}`}
+                onPress={() =>
+                  setExpandedParticipantIds((current) =>
+                    expanded ? current.filter((id) => id !== person.id) : [...current, person.id],
+                  )
+                }
+                style={styles.allocationHeader}
+              >
+                <AllocationPersonHeader
+                  person={person}
+                  creatorId={divi.creatorId}
+                  allocation={allocation}
+                  itemCount={itemBreakdown.length}
+                  expanded={expanded}
+                />
+              </Pressable>
+            ) : (
+              <View style={styles.allocationHeader}>
+                <AllocationPersonHeader
+                  person={person}
+                  creatorId={divi.creatorId}
+                  allocation={allocation}
+                  itemCount={0}
+                  expanded={false}
+                />
+              </View>
+            )}
+            {itemBreakdown.length === 0 ? (
+              <Text style={styles.noItemsHelper}>No items claimed</Text>
+            ) : (
+              expanded && (
+                <View style={styles.allocationDetails}>
+                  {detailRows.map(({ label, amount }, index) => (
+                    <View key={`${label}-${index}`} style={styles.allocationLine}>
+                      <Text style={styles.rowSub}>{label}</Text>
+                      <Text style={styles.rowValue}>{formatMoney(amount)}</Text>
+                    </View>
+                  ))}
+                  <View style={styles.paymentActions}>
+                    <PaymentRequestButton
+                      brand="venmo"
+                      title="Venmo"
+                      onPress={() => onRequest(allocation, person)}
+                    />
+                    <PaymentRequestButton
+                      brand="apple"
+                      title="Apple Cash"
+                      onPress={() =>
+                        Alert.alert('Apple Cash', 'Apple Cash requests are coming soon.')
+                      }
+                    />
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => copyDetails(allocation, person)}
+                    style={styles.secondaryActionButton}
+                  >
+                    <Text style={styles.secondaryActionLabel}>Copy details</Text>
+                  </Pressable>
+                </View>
+              )
+            )}
           </View>
         );
       })}
     </View>
   );
 }
+
+function AllocationPersonHeader({
+  person,
+  creatorId,
+  allocation,
+  itemCount,
+  expanded,
+}: {
+  person: Participant;
+  creatorId: string;
+  allocation: Allocation;
+  itemCount: number;
+  expanded: boolean;
+}) {
+  return (
+    <>
+      <View style={styles.allocationAvatar}>
+        <Text style={styles.allocationAvatarInitial}>{person.name.charAt(0).toUpperCase()}</Text>
+      </View>
+      <View style={styles.rowCopy}>
+        <Text style={styles.rowTitle}>
+          {person.name}
+          {person.id === creatorId ? ' · You' : ''}
+        </Text>
+        <Text style={styles.rowSub}>
+          {itemCount} {itemCount === 1 ? 'item' : 'items'}
+        </Text>
+      </View>
+      <Text style={styles.rowValue}>{formatMoney(allocation.total)}</Text>
+      {itemCount > 0 && (
+        <Ionicons
+          name={expanded ? 'chevron-up' : 'chevron-down'}
+          size={18}
+          color={colors.secondary}
+        />
+      )}
+    </>
+  );
+}
+
+function getAllocationDetailRows(divi: Divi, allocation: Allocation, participantId: string) {
+  const itemRows = allocationItemBreakdown(divi, participantId)
+    .filter(({ amount }) => amount.minorUnits !== 0)
+    .map(({ item, amount }) => ({ label: item.name, amount }));
+  const chargeRows = [
+    { label: 'Tax', amount: allocation.tax },
+    { label: 'Tip', amount: allocation.tip },
+    { label: 'Fees', amount: allocation.fees },
+    { label: 'Discounts', amount: allocation.discounts },
+  ].filter(({ amount }) => amount.minorUnits !== 0);
+  return [...itemRows, ...chargeRows];
+}
+
+function PaymentRequestButton({
+  brand,
+  title,
+  onPress,
+}: {
+  brand: 'venmo' | 'apple';
+  title: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={[styles.paymentButton, brand === 'venmo' ? styles.venmoButton : styles.appleButton]}
+    >
+      {brand === 'venmo' ? (
+        <Ionicons name="logo-venmo" size={22} color="#FFFFFF" />
+      ) : (
+        <Ionicons name="logo-apple" size={20} color="#FFFFFF" />
+      )}
+      <Text style={styles.paymentButtonLabel}>{title}</Text>
+    </Pressable>
+  );
+}
+
 function InviteModal({
   visible,
   divi,
@@ -420,22 +632,9 @@ function InviteModal({
   onAddParticipant: (name: string, phoneNumber: string) => boolean;
 }) {
   const [addingPerson, setAddingPerson] = useState(false);
-  const [name, setName] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
   const { width } = useWindowDimensions();
   const url = `https://divi.example/join/${divi.id}`;
   const qrSize = Math.min(220, Math.max(160, width - 96));
-  const closeAddPerson = () => {
-    Keyboard.dismiss();
-    setAddingPerson(false);
-    setName('');
-    setPhoneNumber('');
-  };
-  const submitParticipant = () => {
-    if (onAddParticipant(name, phoneNumber)) {
-      closeAddPerson();
-    }
-  };
   return (
     <Modal visible={visible} animationType="slide" presentationStyle="pageSheet">
       <SafeAreaView style={styles.safe}>
@@ -476,61 +675,110 @@ function InviteModal({
                 </View>
               ))}
             </View>
-            {addingPerson && (
-              <Modal visible transparent animationType="slide" onRequestClose={closeAddPerson}>
-                <KeyboardAvoidingView
-                  behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                  style={styles.modalBackdrop}
-                >
-                  <Pressable style={styles.modalDismissArea} onPressIn={closeAddPerson} />
-                  <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
-                    <View style={styles.titleRow}>
-                      <Text style={styles.sectionTitle}>Add person</Text>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel="Close add person form"
-                        hitSlop={8}
-                        onPressIn={closeAddPerson}
-                      >
-                        <Ionicons name="close" size={24} color={colors.ink} />
-                      </Pressable>
-                    </View>
-                    <Text style={styles.formHint}>They can be assigned items from your phone.</Text>
-                    <TextInput
-                      autoFocus
-                      accessibilityLabel="Full name"
-                      placeholder="Full name"
-                      placeholderTextColor={colors.tertiary}
-                      onChangeText={setName}
-                      value={name}
-                      style={styles.personInput}
-                    />
-                    <TextInput
-                      accessibilityLabel="Phone number"
-                      keyboardType="phone-pad"
-                      placeholder="Phone number"
-                      placeholderTextColor={colors.tertiary}
-                      onChangeText={setPhoneNumber}
-                      value={phoneNumber}
-                      style={styles.personInput}
-                    />
-                    <PrimaryButton
-                      title="Add to Divi"
-                      onPress={submitParticipant}
-                      onPressIn={Keyboard.dismiss}
-                      disabled={!name.trim()}
-                    />
-                  </Pressable>
-                </KeyboardAvoidingView>
-              </Modal>
-            )}
           </View>
           <View style={styles.bottomActions}>
             <PrimaryButton title="Share invite" onPress={() => Share.share({ message: url })} />
           </View>
         </ScrollView>
+        {addingPerson && (
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.inlineModalBackdrop}
+          >
+            <Pressable style={styles.modalDismissArea} onPress={() => setAddingPerson(false)} />
+            <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+              <AddPersonForm
+                onClose={() => setAddingPerson(false)}
+                onAddParticipant={onAddParticipant}
+              />
+            </Pressable>
+          </KeyboardAvoidingView>
+        )}
       </SafeAreaView>
     </Modal>
+  );
+}
+
+function AddPersonModal({
+  visible,
+  onClose,
+  onAddParticipant,
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onAddParticipant: (name: string, phoneNumber: string) => boolean;
+}) {
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.modalBackdrop}
+      >
+        <Pressable style={styles.modalDismissArea} onPress={onClose} />
+        <Pressable style={styles.modalCard} onPress={(event) => event.stopPropagation()}>
+          <AddPersonForm onClose={onClose} onAddParticipant={onAddParticipant} />
+        </Pressable>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+function AddPersonForm({
+  onClose,
+  onAddParticipant,
+}: {
+  onClose: () => void;
+  onAddParticipant: (name: string, phoneNumber: string) => boolean;
+}) {
+  const [name, setName] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const close = () => {
+    Keyboard.dismiss();
+    onClose();
+  };
+  const submit = () => {
+    if (onAddParticipant(name, phoneNumber)) close();
+  };
+
+  return (
+    <>
+      <View style={styles.titleRow}>
+        <Text style={styles.sectionTitle}>Add person</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close add person form"
+          hitSlop={8}
+          onPress={close}
+        >
+          <Ionicons name="close" size={24} color={colors.ink} />
+        </Pressable>
+      </View>
+      <Text style={styles.formHint}>They can be assigned items from your phone.</Text>
+      <TextInput
+        autoFocus
+        accessibilityLabel="Full name"
+        placeholder="Full name"
+        placeholderTextColor={colors.tertiary}
+        onChangeText={setName}
+        value={name}
+        style={styles.personInput}
+      />
+      <TextInput
+        accessibilityLabel="Phone number"
+        keyboardType="phone-pad"
+        placeholder="Phone number"
+        placeholderTextColor={colors.tertiary}
+        onChangeText={setPhoneNumber}
+        value={phoneNumber}
+        style={styles.personInput}
+      />
+      <PrimaryButton
+        title="Add to Divi"
+        onPress={submit}
+        onPressIn={Keyboard.dismiss}
+        disabled={!name.trim()}
+      />
+    </>
   );
 }
 function FallbackModal({

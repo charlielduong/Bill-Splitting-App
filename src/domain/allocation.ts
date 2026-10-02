@@ -1,6 +1,8 @@
-import { adjustmentTotal, Allocation, Divi, money } from './models';
+import { adjustmentTotal, Allocation, Divi, money, ReceiptItem } from './models';
 
 export type AllocationError = 'NO_PARTICIPANTS' | 'UNCLAIMED_ITEMS' | 'UNRECONCILED_TOTAL';
+
+export type AllocationItemShare = { item: ReceiptItem; amount: ReturnType<typeof money> };
 
 const distribute = (amount: number, weights: Record<string, number>, ids: string[]) => {
   const denominator = Math.max(
@@ -24,6 +26,21 @@ const distribute = (amount: number, weights: Record<string, number>, ids: string
   }
   return result;
 };
+
+export const allocationItemBreakdown = (divi: Divi, participantId: string): AllocationItemShare[] =>
+  divi.items.flatMap((item) => {
+    if (!item.claimantIds.includes(participantId)) return [];
+    const claimants = [...item.claimantIds].sort();
+    const claimantIndex = claimants.indexOf(participantId);
+    const base = Math.trunc(item.amount.minorUnits / claimants.length);
+    const remainder = item.amount.minorUnits % claimants.length;
+    return [
+      {
+        item,
+        amount: money(base + (claimantIndex < remainder ? 1 : 0), item.amount.currencyCode),
+      },
+    ];
+  });
 
 export const finalizeAllocations = (divi: Divi): Allocation[] => {
   if (!divi.participants.length) throw new Error('NO_PARTICIPANTS' satisfies AllocationError);
