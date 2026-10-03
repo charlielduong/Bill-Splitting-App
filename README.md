@@ -2,11 +2,18 @@
 
 Divi is a receipt-first bill-splitting app built with React Native, Expo, and TypeScript. This first local-review build uses deterministic sample data and mock service adapters, so the complete core experience can be tested without accounts, API keys, or a backend.
 
+## Project structure
+
+- `divi_client/` — Expo React Native app, client services, assets, tests, and client environment variables.
+- `divi_backend/` — local Supabase CLI project, migrations, seed data, and backend environment variables.
+- `docs/` — product, architecture, design, and flow documentation.
+
 ## Run locally
 
 Requirements: Node.js 22.13 or newer and npm.
 
 ```sh
+cd divi_client
 npm install
 npm run ios
 ```
@@ -16,6 +23,7 @@ Receipt OCR uses Apple Vision on iOS and Google ML Kit on Android. It runs entir
 Build and run the app in the iOS Simulator or Android emulator:
 
 ```sh
+cd divi_client
 npm run ios
 npm run android
 ```
@@ -26,12 +34,13 @@ This project includes the Supabase CLI configuration for a Docker-backed local s
 Docker Desktop is running, then start Supabase with:
 
 ```sh
-npm run supabase:start
+cd divi_backend
+npm run start
 ```
 
 The local API is available at `http://127.0.0.1:54321`, Studio at
 `http://127.0.0.1:54323`, and Postgres at `127.0.0.1:54322`. The CLI applies migrations from
-`supabase/migrations` and seed data from `supabase/seed.sql`.
+`divi_backend/migrations` and seed data from `divi_backend/seed.sql`.
 
 After the first start, copy the generated publishable key into `.env`:
 
@@ -40,8 +49,14 @@ EXPO_PUBLIC_SUPABASE_URL=http://127.0.0.1:54321
 EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local-key-from-supabase-start>
 ```
 
-Use `npm run supabase:stop` to stop the containers, `npm run supabase:status` to inspect them, and
-`npm run supabase:reset` to recreate the database from migrations and seed data.
+The client environment file belongs at `divi_client/.env`.
+
+The local backend keeps the database, API, Studio, and Auth services enabled. Analytics,
+Realtime, Storage, local SMTP, and Edge Functions are disabled in `divi_backend/config.toml` until
+the app needs them.
+
+Use `npm run stop` to stop the containers, `npm run status` to inspect them, and `npm run reset` to
+recreate the database from migrations and seed data. Run these commands from `divi_backend`.
 
 ### Google sign-in
 
@@ -50,9 +65,9 @@ To enable it locally:
 
 1. Create a Google OAuth **Web application** client in Google Cloud.
 2. Add `http://127.0.0.1:54321/auth/v1/callback` as an authorized redirect URI.
-3. Copy `supabase/.env.example` to `supabase/.env` and add the Google client ID and secret.
-4. Set `enabled = true` in `[auth.external.google]` in `supabase/config.toml`.
-5. Restart Supabase with `npm run supabase:stop && npm run supabase:start`.
+3. Copy `divi_backend/.env.example` to `divi_backend/.env` and add the Google client ID and secret.
+4. Set `enabled = true` in `[auth.external.google]` in `divi_backend/config.toml`.
+5. Restart Supabase from `divi_backend` with `npm run stop && npm run start`.
 6. Rebuild the native app after changing the Expo scheme or native dependencies:
 
 ```sh
@@ -63,12 +78,13 @@ Google OAuth configuration for self-hosted Supabase is handled in the local conf
 than the hosted Dashboard. The app's sign-in button opens the provider in a browser and exchanges
 the returned session through the configured deep link.
 
-Choose **Try local demo** on the welcome screen.
+Choose **Continue with Google** on the welcome screen.
 
 
 To test the complete camera-to-claim flow with a real receipt on a connected iPhone, enable Developer Mode on the phone, connect it to the Mac, and run:
 
 ```sh
+cd divi_client
 npm run ios:device
 ```
 
@@ -82,15 +98,16 @@ Use the installed **Divi development app**, not Expo Go. Keep the iPhone and Mac
 2. In the project folder, start Metro with the development-client option:
 
    ```sh
+   cd divi_client
    npx expo start --dev-client --lan
    ```
 
    Leave the terminal running. If port `8081` is already in use, use the existing Expo terminal or stop that server with **Ctrl+C** before starting another.
 3. Open **Divi** on your iPhone. If it does not connect to Metro, scan the terminal’s QR code with the iPhone Camera and open the link in Divi.
-4. In VS Code, open `src/services/receiptParser.ts`. Click the gutter beside line 99 to set a breakpoint inside `firstMerchantLine()`. When it pauses, inspect `lines` and `candidate`; use **Continue** to step through the candidates.
+4. In VS Code, open `divi_client/src/services/receiptParser.ts`. Click the gutter beside line 99 to set a breakpoint inside `firstMerchantLine()`. When it pauses, inspect `lines` and `candidate`; use **Continue** to step through the candidates.
 5. In Divi, tap **Create Divi**, take or choose a receipt, confirm the photo, and tap **Scan receipt**.
 
-To inspect the raw OCR text before parsing, set another breakpoint in `src/screens/CreateDiviScreen.tsx` on the `recognizeText(...)` call, then inspect `result.text`. From the Metro terminal, press **j** to open React Native DevTools if VS Code does not pause at the breakpoint. If `result.text` is correct but the selected title or items are wrong, trace `parseReceiptText()` in `src/services/receiptParser.ts`.
+To inspect the raw OCR text before parsing, set another breakpoint in `divi_client/src/screens/CreateDiviScreen.tsx` on the `recognizeText(...)` call, then inspect `result.text`. From the Metro terminal, press **j** to open React Native DevTools if VS Code does not pause at the breakpoint. If `result.text` is correct but the selected title or items are wrong, trace `parseReceiptText()` in `divi_client/src/services/receiptParser.ts`.
 
 ## What is ready to review
 
@@ -109,6 +126,7 @@ To inspect the raw OCR text before parsing, set another breakpoint in `src/scree
 ## Verify the project
 
 ```sh
+cd divi_client
 npm run typecheck
 npm test
 npm run export:web
@@ -116,11 +134,11 @@ npm run export:web
 
 ## Current integration boundaries
 
-- Authentication is a local demo adapter.
+- Authentication uses Supabase Auth with Google sign-in.
 - Receipt OCR runs locally; selected images are not uploaded.
 - Receipt parsing is heuristic and always requires user review because store layouts vary.
 - Storage is in memory and resets when the app reloads.
 - Venmo uses a best-effort URL handoff. Opening Venmo marks a request as initiated, not paid.
-- Supabase, production credentials, native App Clip support, and deployment are intentionally outside this first local walkthrough.
+- Production credentials, native App Clip support, and deployment are intentionally outside this first local walkthrough.
 
 See `docs/` for product, flow, architecture, design, acceptance, and open-question specifications.
