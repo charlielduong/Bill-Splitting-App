@@ -37,7 +37,8 @@
         {
           "cameraPermission": "Allow Divi to photograph a receipt for bill splitting."
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { SafeAreaView, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
+import type { Session } from '@supabase/supabase-js';
 import { TabBar, TabName } from './components/navigation';
 import { Divi, sampleDinner } from './domain/models';
 import { CreateDiviScreen } from './screens/CreateDiviScreen';
@@ -13,11 +14,15 @@ import {
   WelcomeScreen,
 } from './screens/HomeScreens';
 import { appStyles as styles } from './theme/appStyles';
+import { supabase } from '../lib/supabase';
+import { signInWithGoogle } from './services/googleAuth';
 
 type Route = { name: 'root' } | { name: 'create'; draft?: Divi } | { name: 'detail'; id: string };
 
 export default function DiviApp() {
-  const [authenticated, setAuthenticated] = useState(false);
+  const [session, setSession] = useState<Session | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabName>('home');
   const [route, setRoute] = useState<Route>({ name: 'root' });
   const [divis, setDivis] = useState<Divi[]>([sampleDinner()]);
@@ -25,6 +30,41 @@ export default function DiviApp() {
     'Alex joined Dinner at Barcelona',
     'Receipt ready for claiming',
   ]);
+
+  useEffect(() => {
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) setAuthError(error.message);
+      setSession(data.session);
+      setAuthLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    setAuthLoading(true);
+    try {
+      const nextSession = await signInWithGoogle();
+      if (!nextSession) setAuthLoading(false);
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : 'Google sign-in failed.');
+      setAuthLoading(false);
+    }
+  };
   const updateDivi = (next: Divi) =>
     setDivis((items) => items.map((item) => (item.id === next.id ? next : item)));
   const deleteDivi = (id: string) => setDivis((items) => items.filter((item) => item.id !== id));
@@ -51,7 +91,12 @@ export default function DiviApp() {
     else setRoute({ name: 'detail', id });
   };
 
-  if (!authenticated) return <WelcomeScreen onContinue={() => setAuthenticated(true)} />;
+  if (authLoading && !session)
+    return <WelcomeScreen onGoogleSignIn={handleGoogleSignIn} isLoading error={authError} />;
+  if (!session)
+    return (
+      <WelcomeScreen onGoogleSignIn={handleGoogleSignIn} isLoading={false} error={authError} />
+    );
   if (route.name === 'create')
     return (
       <CreateDiviScreen
@@ -86,7 +131,14 @@ export default function DiviApp() {
         {tab === 'activity' && (
           <SimpleListScreen title="Activity" rows={activity} icon="time-outline" />
         )}
-        {tab === 'profile' && <ProfileScreen onSignOut={() => setAuthenticated(false)} />}
+        {tab === 'profile' && (
+          <ProfileScreen
+            user={session.user}
+            onSignOut={() => {
+              void supabase.auth.signOut();
+            }}
+          />
+        )}
         <TabBar selected={tab} onSelect={setTab} onCreate={() => setRoute({ name: 'create' })} />
       </View>
     </SafeAreaView>

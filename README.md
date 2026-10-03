@@ -43,6 +43,26 @@ EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<local-key-from-supabase-start>
 Use `npm run supabase:stop` to stop the containers, `npm run supabase:status` to inspect them, and
 `npm run supabase:reset` to recreate the database from migrations and seed data.
 
+### Google sign-in
+
+Google sign-in is implemented through Supabase Auth and the Expo `divi://auth/callback` deep link.
+To enable it locally:
+
+1. Create a Google OAuth **Web application** client in Google Cloud.
+2. Add `http://127.0.0.1:54321/auth/v1/callback` as an authorized redirect URI.
+3. Copy `supabase/.env.example` to `supabase/.env` and add the Google client ID and secret.
+4. Set `enabled = true` in `[auth.external.google]` in `supabase/config.toml`.
+5. Restart Supabase with `npm run supabase:stop && npm run supabase:start`.
+6. Rebuild the native app after changing the Expo scheme or native dependencies:
+
+```sh
+npm run ios
+```
+
+Google OAuth configuration for self-hosted Supabase is handled in the local configuration rather
+than the hosted Dashboard. The app's sign-in button opens the provider in a browser and exchanges
+the returned session through the configured deep link.
+
 Choose **Try local demo** on the welcome screen.
 
 

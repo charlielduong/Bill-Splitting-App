@@ -1,6 +1,7 @@
 import React, { useRef } from 'react';
 import {
   Animated,
+  Image,
   PanResponder,
   Pressable,
   SafeAreaView,
@@ -8,6 +9,7 @@ import {
   Text,
   View,
 } from 'react-native';
+import type { User } from '@supabase/supabase-js';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { PrimaryButton } from '../components/ui';
@@ -15,7 +17,15 @@ import { Divi, formatMoney } from '../domain/models';
 import { appStyles as styles } from '../theme/appStyles';
 import { colors } from '../theme/theme';
 
-export function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
+export function WelcomeScreen({
+  onGoogleSignIn,
+  isLoading,
+  error,
+}: {
+  onGoogleSignIn: () => void;
+  isLoading: boolean;
+  error: string | null;
+}) {
   return (
     <SafeAreaView style={styles.welcome}>
       <StatusBar style="light" />
@@ -29,10 +39,12 @@ export function WelcomeScreen({ onContinue }: { onContinue: () => void }) {
         </Text>
       </View>
       <View style={styles.welcomeActions}>
-        <PrimaryButton title="Continue with Apple" onPress={onContinue} />
-        <Pressable onPress={onContinue}>
-          <Text style={styles.demoLink}>Try local demo</Text>
-        </Pressable>
+        <PrimaryButton
+          title={isLoading ? 'Opening Google…' : 'Continue with Google'}
+          onPress={onGoogleSignIn}
+          disabled={isLoading}
+        />
+        {error ? <Text style={styles.authError}>{error}</Text> : null}
       </View>
     </SafeAreaView>
   );
@@ -199,24 +211,51 @@ export function SimpleListScreen({
     </ScrollView>
   );
 }
-export function ProfileScreen({ onSignOut }: { onSignOut: () => void }) {
+export function ProfileScreen({
+  user,
+  onSignOut,
+}: {
+  user: User;
+  onSignOut: () => void;
+}) {
+  const metadata = user.user_metadata ?? {};
+  const displayName = String(
+    metadata.full_name ??
+      metadata.name ??
+      user.email?.split('@')[0] ??
+      'Divi user',
+  );
+  const avatarUrl = metadata.avatar_url ?? metadata.picture;
+  const initials = displayName
+    .trim()
+    .split(/\s+/)
+    .map((part: string) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+
   return (
     <ScrollView contentContainerStyle={styles.page}>
       <Text style={styles.pageTitle}>Profile</Text>
       <View style={styles.profileAvatar}>
-        <Text style={styles.profileInitial}>C</Text>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.profileAvatarImage} />
+        ) : (
+          <Text style={styles.profileInitial}>{initials}</Text>
+        )}
       </View>
       <View style={styles.listRow}>
         <Text style={styles.rowTitle}>Name</Text>
-        <Text style={styles.rowValue}>Charlie</Text>
+        <Text style={styles.rowValue} numberOfLines={1}>
+          {displayName}
+        </Text>
       </View>
       <View style={styles.listRow}>
-        <Text style={styles.rowTitle}>Venmo</Text>
-        <Text style={styles.rowValue}>@charlie</Text>
-      </View>
-      <View style={styles.listRow}>
-        <Text style={styles.rowTitle}>Currency</Text>
-        <Text style={styles.rowValue}>USD</Text>
+        <Text style={styles.rowTitle}>Email</Text>
+        <Text style={styles.rowValue} numberOfLines={1}>
+          {user.email ?? 'Not provided'}
+        </Text>
       </View>
       <Pressable onPress={onSignOut}>
         <Text style={styles.signOut}>Sign out</Text>
